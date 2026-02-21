@@ -12,9 +12,9 @@ const PRODUCTS = {
   premium: process.env.PREMIUM_PRODUCT_ID,
 };
 
-const publicDir = path.resolve(__dirname, "public");
+const rootDir = path.resolve(__dirname);
 
-app.use(express.static(publicDir));
+app.use(express.static(rootDir));
 
 // ── Instant checkout redirect ─────────────────────────────────────────
 async function instantCheckout(tier, req, res) {
@@ -59,11 +59,11 @@ app.get("/basic",   (req, res) => instantCheckout("basic",   req, res));
 app.get("/premium", (req, res) => instantCheckout("premium", req, res));
 
 app.get("/success", (req, res) => {
-  res.sendFile(path.join(publicDir, "success.html"));
+  res.sendFile(path.join(rootDir, "success.html"));
 });
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(publicDir, "index.html"));
+  res.sendFile(path.join(rootDir, "index.html"));
 });
 
 app.listen(PORT, () => {
