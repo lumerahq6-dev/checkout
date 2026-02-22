@@ -2,11 +2,22 @@ require("dotenv").config();
 const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
 const MAIN_SITE_ORIGIN = (process.env.MAIN_SITE_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
+const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
+const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
+
+function generateAccessKey() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let key = "";
+  const bytes = crypto.randomBytes(12);
+  for (let i = 0; i < 12; i++) key += chars[bytes[i] % chars.length];
+  return key;
+}
 
 const PRODUCTS = {
   basic:   process.env.BASIC_PRODUCT_ID,
@@ -91,6 +102,56 @@ app.post(
 );
 
 app.use(express.static(rootDir));
+
+// ── /api/claim-key — called by success page to get access key ───────
+app.options("/api/claim-key", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.sendStatus(204);
+});
+
+app.post("/api/claim-key", express.json(), async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  const { sessionId } = req.body || {};
+  if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+  // Retry up to 4x waiting for Stripe to confirm payment
+  let lastErr = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status !== "paid") {
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+        return res.status(402).json({ error: "Payment not completed" });
+      }
+
+      const tier = session.metadata?.tier || "basic";
+      const key = generateAccessKey();
+
+      // Persist the key on omeglepay so pornyard can redeem it
+      if (CHECKOUT_SECRET && OMEGLEPAY_ORIGIN) {
+        try {
+          await fetch(`${OMEGLEPAY_ORIGIN}/api/store-key`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, tier, sessionId, checkoutSecret: CHECKOUT_SECRET }),
+          });
+        } catch (storeErr) {
+          console.error("⚠️ Failed to store key on omeglepay:", storeErr.message);
+        }
+      }
+
+      console.log(`🔑 Key generated via claim-key: ${key} (${tier})`);
+      return res.json({ key, tier });
+    } catch (err) {
+      lastErr = err.message;
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+    }
+  }
+  console.error("❌ claim-key error:", lastErr);
+  return res.status(500).json({ error: "Failed to verify payment" });
+});
 
 // ── /test → instant checkout with TEST_PRODUCT_ID (premium tier) ────
 app.get("/test", async (req, res) => {
