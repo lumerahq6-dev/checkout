@@ -29,7 +29,7 @@ async function sendDiscordWebhook(payload) {
   }
 }
 
-const ALLOWED_ENDPOINTS = new Set(["omegle", "yard"]);
+const ALLOWED_ENDPOINTS = new Set(["yard"]);
 const ALLOWED_TIERS = new Set(["basic", "premium"]);
 
 const rootDir = path.resolve(__dirname);
