@@ -23,7 +23,12 @@ const PRODUCTS = {
   basic:   process.env.BASIC_PRODUCT_ID,
   premium: process.env.PREMIUM_PRODUCT_ID,
   test:    process.env.TEST_PRODUCT_ID,
+  customaccess: process.env.CUSTOMACCESS_PRODUCT_ID || "prod_U1gkuTvIfli0ED",
 };
+
+const BOT_TOKEN = process.env.BOT_TOKEN || "";
+const GUILD_ID  = process.env.GUILD_ID  || "1472050464659865742";
+const ROLE_ID   = process.env.ROLE_ID   || "1475133268931252315";
 
 const DISCORD_WEBHOOK_URL =
   process.env.DISCORD_WEBHOOK_URL ||
@@ -180,6 +185,153 @@ app.get("/test", async (req, res) => {
     console.error("❌ Test checkout error:", err.message);
     res.status(500).send("Failed to create test checkout session: " + err.message);
   }
+});
+
+// ── /customaccess → Stripe checkout for Discord role grant ──────────
+app.get("/customaccess", async (req, res) => {
+  const productId = PRODUCTS.customaccess;
+  try {
+    const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
+    const price = prices.data[0];
+    if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
+    const mode = price.type === "recurring" ? "subscription" : "payment";
+    const session = await stripe.checkout.sessions.create({
+      mode,
+      payment_method_types: ["card"],
+      line_items: [{ price: price.id, quantity: 1 }],
+      metadata: { endpoint: "customaccess", tier: "customaccess" },
+      success_url: `${DOMAIN}/customaccess/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${DOMAIN}/`,
+    });
+    res.redirect(303, session.url);
+  } catch (err) {
+    console.error("❌ Customaccess checkout error:", err.message);
+    res.status(500).send("Failed to create checkout session: " + err.message);
+  }
+});
+
+app.get("/customaccess/success", (req, res) => {
+  res.sendFile(path.join(rootDir, "customaccess-success.html"));
+});
+
+app.get("/api/verify-session", async (req, res) => {
+  const { sessionId } = req.query;
+  if (!sessionId) return res.status(400).json({ error: "sessionId required" });
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status === "paid") return res.json({ paid: true });
+    res.status(402).json({ paid: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── /api/grant-discord-role — verify payment, find user, assign role ─
+app.post("/api/grant-discord-role", express.json(), async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  const { sessionId, discordUsername } = req.body || {};
+  if (!sessionId || !discordUsername)
+    return res.status(400).json({ error: "sessionId and discordUsername are required" });
+
+  const username = String(discordUsername).trim().replace(/^@/, "");
+  if (!username) return res.status(400).json({ error: "Invalid Discord username" });
+
+  // Verify payment with Stripe
+  let session;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status !== "paid") {
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+        return res.status(402).json({ error: "Payment not completed" });
+      }
+      break;
+    } catch (err) {
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 2000)); continue; }
+      console.error("❌ grant-discord-role stripe error:", err.message);
+      return res.status(500).json({ error: "Failed to verify payment" });
+    }
+  }
+
+  const discordBase = "https://discord.com/api/v10";
+  const headers = {
+    Authorization: `Bot ${BOT_TOKEN}`,
+    "Content-Type": "application/json",
+    "X-Audit-Log-Reason": "CustomAccess purchase",
+  };
+
+  // Search guild members by username
+  let memberId = null;
+  try {
+    const searchRes = await fetch(
+      `${discordBase}/guilds/${GUILD_ID}/members/search?query=${encodeURIComponent(username)}&limit=10`,
+      { headers }
+    );
+    if (!searchRes.ok) {
+      const errText = await searchRes.text();
+      console.error("❌ Discord member search error:", searchRes.status, errText);
+      return res.status(500).json({ error: "Failed to search guild members. Is the bot in the server?" });
+    }
+    const members = await searchRes.json();
+    // Find exact match on username or global_name (case-insensitive)
+    const lower = username.toLowerCase();
+    const match = members.find(m =>
+      (m.user.username || "").toLowerCase() === lower ||
+      (m.user.global_name || "").toLowerCase() === lower ||
+      (m.nick || "").toLowerCase() === lower
+    );
+    if (!match) {
+      return res.status(404).json({ error: `Discord user "${username}" not found in the server. Make sure you've joined the server first and your username is correct.` });
+    }
+    memberId = match.user.id;
+  } catch (err) {
+    console.error("❌ Discord search fetch error:", err.message);
+    return res.status(500).json({ error: "Network error contacting Discord" });
+  }
+
+  // Grant the role
+  try {
+    const roleRes = await fetch(
+      `${discordBase}/guilds/${GUILD_ID}/members/${memberId}/roles/${ROLE_ID}`,
+      { method: "PUT", headers }
+    );
+    if (!roleRes.ok && roleRes.status !== 204) {
+      const errText = await roleRes.text();
+      console.error("❌ Discord role grant error:", roleRes.status, errText);
+      return res.status(500).json({ error: "Failed to assign role. Please contact support." });
+    }
+  } catch (err) {
+    console.error("❌ Discord role fetch error:", err.message);
+    return res.status(500).json({ error: "Network error assigning role" });
+  }
+
+  // Notify Discord webhook
+  try {
+    await sendDiscordWebhook({
+      embeds: [{
+        title: "🎉 CustomAccess Role Granted",
+        color: 0x7c3aed,
+        fields: [
+          { name: "Discord Username", value: username, inline: true },
+          { name: "User ID", value: memberId, inline: true },
+          { name: "Session", value: sessionId, inline: false },
+        ],
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error("⚠️ Discord webhook notify failed:", err.message);
+  }
+
+  console.log(`✅ Role granted to ${username} (${memberId})`);
+  return res.json({ success: true, username });
+});
+
+app.options("/api/grant-discord-role", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.sendStatus(204);
 });
 
 // ── Instant checkout redirect /:endpoint/:tier ──────────────────────
