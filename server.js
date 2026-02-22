@@ -6,10 +6,21 @@ const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const DOMAIN = process.env.DOMAIN || `http://localhost:${PORT}`;
+const DOMAIN = (process.env.DOMAIN || "").replace(/\/+$/, "");
 const MAIN_SITE_ORIGIN = (process.env.MAIN_SITE_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
 const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
 const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
+
+app.set("trust proxy", true);
+
+function getPublicOrigin(req) {
+  if (DOMAIN) return DOMAIN;
+  const forwardedProto = (req.headers["x-forwarded-proto"] || "").toString().split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "https";
+  const forwardedHost = (req.headers["x-forwarded-host"] || "").toString().split(",")[0].trim();
+  const host = forwardedHost || req.get("host");
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
 
 function generateAccessKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -178,7 +189,7 @@ app.get("/test", async (req, res) => {
       line_items: [{ price: price.id, quantity: 1 }],
       metadata: { endpoint: "test", tier: "premium" },
       success_url: `${MAIN_SITE_ORIGIN}/yard/premium/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${DOMAIN}/test`,
+      cancel_url:  `${getPublicOrigin(req)}/test`,
     });
     res.redirect(303, session.url);
   } catch (err) {
@@ -195,13 +206,14 @@ app.get("/customaccess", async (req, res) => {
     const price = prices.data[0];
     if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
     const mode = price.type === "recurring" ? "subscription" : "payment";
+    const origin = getPublicOrigin(req);
     const session = await stripe.checkout.sessions.create({
       mode,
       payment_method_types: ["card"],
       line_items: [{ price: price.id, quantity: 1 }],
       metadata: { endpoint: "customaccess", tier: "customaccess" },
-      success_url: `${DOMAIN}/customaccess/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${DOMAIN}/`,
+      success_url: `${origin}/customaccess/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${origin}/`,
     });
     res.redirect(303, session.url);
   } catch (err) {
@@ -394,7 +406,7 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Checkout server running on port ${PORT}`);
-  console.log(`🌐 ${DOMAIN}`);
+  console.log(`🌐 DOMAIN: ${DOMAIN || "(derived from request)"}`);
   console.log(`📦 Basic product:   ${PRODUCTS.basic   || "⚠️  NOT SET"}`);
   console.log(`📦 Premium product: ${PRODUCTS.premium || "⚠️  NOT SET"}`);
   console.log(`📦 Test product:    ${PRODUCTS.test    || "⚠️  NOT SET"}`);
