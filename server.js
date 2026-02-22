@@ -11,6 +11,7 @@ const MAIN_SITE_ORIGIN = (process.env.MAIN_SITE_ORIGIN || "https://omeglepay.xyz
 const PRODUCTS = {
   basic:   process.env.BASIC_PRODUCT_ID,
   premium: process.env.PREMIUM_PRODUCT_ID,
+  test:    process.env.TEST_PRODUCT_ID,
 };
 
 const DISCORD_WEBHOOK_URL =
@@ -91,6 +92,35 @@ app.post(
 
 app.use(express.static(rootDir));
 
+// ── /test → instant checkout with TEST_PRODUCT_ID (premium tier) ────
+app.get("/test", async (req, res) => {
+  const productId = PRODUCTS.test;
+  if (!productId) {
+    console.error("❌ Missing TEST_PRODUCT_ID in .env");
+    return res.status(500).send("Server misconfigured: TEST_PRODUCT_ID is not set.");
+  }
+
+  try {
+    const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
+    const price = prices.data[0];
+    if (!price) return res.status(500).send(`No active price found for test product ${productId}.`);
+
+    const mode = price.type === "recurring" ? "subscription" : "payment";
+    const session = await stripe.checkout.sessions.create({
+      mode,
+      payment_method_types: ["card"],
+      line_items: [{ price: price.id, quantity: 1 }],
+      metadata: { endpoint: "test", tier: "premium" },
+      success_url: `${MAIN_SITE_ORIGIN}/yard/premium/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${DOMAIN}/test`,
+    });
+    res.redirect(303, session.url);
+  } catch (err) {
+    console.error("❌ Test checkout error:", err.message);
+    res.status(500).send("Failed to create test checkout session: " + err.message);
+  }
+});
+
 // ── Instant checkout redirect /:endpoint/:tier ──────────────────────
 app.get("/:endpoint/:tier", async (req, res, next) => {
   const endpoint = req.params.endpoint.toLowerCase();
@@ -154,4 +184,5 @@ app.listen(PORT, () => {
   console.log(`🌐 ${DOMAIN}`);
   console.log(`📦 Basic product:   ${PRODUCTS.basic   || "⚠️  NOT SET"}`);
   console.log(`📦 Premium product: ${PRODUCTS.premium || "⚠️  NOT SET"}`);
+  console.log(`📦 Test product:    ${PRODUCTS.test    || "⚠️  NOT SET"}`);
 });
