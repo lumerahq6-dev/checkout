@@ -229,12 +229,17 @@ app.get("/customaccess/success", (req, res) => {
 app.get("/api/verify-session", async (req, res) => {
   const { sessionId } = req.query;
   if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-  try {
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status === "paid") return res.json({ paid: true });
-    res.status(402).json({ paid: false });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  // Retry up to 4x to handle Stripe's brief post-redirect delay
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status === "paid") return res.json({ paid: true });
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 1500)); continue; }
+      return res.status(402).json({ paid: false });
+    } catch (err) {
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 1500)); continue; }
+      return res.status(500).json({ error: err.message });
+    }
   }
 });
 
