@@ -262,6 +262,112 @@ app.get("/customaccess/success", (req, res) => {
   res.sendFile(path.join(rootDir, "customaccess-success.html"));
 });
 
+// ── /request → custom request flow (username first, then checkout) ───────────
+app.get("/request", (req, res) => {
+  res.sendFile(path.join(rootDir, "request.html"));
+});
+
+app.get("/request/checkout", async (req, res) => {
+  const username = (req.query.username || "").toString().trim().replace(/^@/, "");
+  if (!username) return res.status(400).send("Discord username is required");
+
+  const origin = CHECKOUT_ORIGIN || getPublicOrigin(req);
+  if (!CHECKOUT_ORIGIN) {
+    console.warn("⚠️  CHECKOUT_ORIGIN not set — success URL may use localhost. Set CHECKOUT_ORIGIN in .env");
+  }
+
+  const productId = CUSTOMACCESS_TEST_PRODUCT_ID;
+  try {
+    const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
+    const price = prices.data[0];
+    if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
+    const mode = price.type === "recurring" ? "subscription" : "payment";
+
+    const session = await stripe.checkout.sessions.create({
+      mode,
+      payment_method_types: ["card"],
+      line_items: [{ price: price.id, quantity: 1 }],
+      metadata: { endpoint: "request", tier: "request", discordUsername: username },
+      success_url: `${origin}/request/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/request`,
+    });
+    res.redirect(303, session.url);
+  } catch (err) {
+    console.error("❌ Request checkout error:", err.message);
+    res.status(500).send("Failed to create checkout session: " + err.message);
+  }
+});
+
+app.get("/request/success", (req, res) => {
+  res.sendFile(path.join(rootDir, "request-success.html"));
+});
+
+app.post("/api/send-request-notification", express.json(), async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  const { sessionId } = req.body || {};
+  if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+
+  // Verify payment with retry
+  let session;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status !== "paid") {
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 1500)); continue; }
+        return res.status(402).json({ error: "Payment not completed" });
+      }
+      break;
+    } catch (err) {
+      if (attempt < 3) { await new Promise(r => setTimeout(r, 1500)); continue; }
+      console.error("❌ send-request-notification stripe error:", err.message);
+      return res.status(500).json({ error: "Failed to verify payment" });
+    }
+  }
+
+  const username = session.metadata?.discordUsername || "Unknown User";
+  const channelId = "1475355092323667968";
+
+  // Send message to Discord channel using bot token
+  try {
+    const discordBase = "https://discord.com/api/v10";
+    const headers = {
+      Authorization: `Bot ${BOT_TOKEN}`,
+      "Content-Type": "application/json",
+    };
+
+    const messageRes = await fetch(`${discordBase}/channels/${channelId}/messages`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        embeds: [{
+          description: `**${username}** just unlocked a custom request for 99 cents.`,
+          color: 0x10b981,
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+    });
+
+    if (!messageRes.ok) {
+      const errText = await messageRes.text();
+      console.error("❌ Discord message send error:", messageRes.status, errText);
+      return res.status(500).json({ error: "Failed to send Discord notification" });
+    }
+
+    console.log(`✅ Custom request notification sent for ${username}`);
+    return res.json({ success: true, username });
+  } catch (err) {
+    console.error("❌ Failed to send request notification:", err.message);
+    return res.status(500).json({ error: "Failed to send notification" });
+  }
+});
+
+app.options("/api/send-request-notification", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.sendStatus(204);
+});
+
 app.get("/api/verify-session", async (req, res) => {
   const { sessionId } = req.query;
   if (!sessionId) return res.status(400).json({ error: "sessionId required" });

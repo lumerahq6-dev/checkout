@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Request - 99¢</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0e0e14;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    .card {
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 480px;
+    }
+    .icon { font-size: 48px; margin-bottom: 16px; text-align: center; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 8px; color: #fff; text-align: center; }
+    .price { 
+      text-align: center; 
+      font-size: 2rem; 
+      font-weight: 900; 
+      color: #10b981; 
+      margin-bottom: 24px; 
+    }
+    .includes {
+      background: #0d0d1a;
+      border: 1px solid #3b3b6b;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 28px;
+    }
+    .includes h2 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #a78bfa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .includes ul {
+      list-style: none;
+      padding: 0;
+    }
+    .includes li {
+      padding: 6px 0;
+      color: #cbd5e1;
+      font-size: 0.95rem;
+      position: relative;
+      padding-left: 20px;
+    }
+    .includes li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: 700;
+    }
+    label {
+      display: block;
+      text-align: left;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      background: #0d0d1a;
+      border: 1px solid #3b3b6b;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+      margin-bottom: 16px;
+    }
+    input[type="text"]:focus { border-color: #7c3aed; }
+    input[type="text"]::placeholder { color: #475569; }
+    button {
+      width: 100%;
+      padding: 13px;
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #6d28d9; }
+    .error {
+      margin-top: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: #3b0f0f;
+      border: 1px solid #7f1d1d;
+      color: #fca5a5;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">💬</div>
+  <h1>Custom Request</h1>
+  <div class="price">$0.99</div>
+
+  <div class="includes">
+    <h2>Your request can include:</h2>
+    <ul>
+      <li>Fansign</li>
+      <li>Moaning Name</li>
+      <li>Custom Position</li>
+      <li>ETC, nothing stupid</li>
+    </ul>
+  </div>
+
+  <form id="request-form">
+    <label for="discord-input">Your Discord Username</label>
+    <input
+      type="text"
+      id="discord-input"
+      placeholder="e.g. johndoe or john_doe123"
+      autocomplete="off"
+      autocapitalize="none"
+      spellcheck="false"
+      required
+    />
+    <button type="submit">Continue to Payment →</button>
+  </form>
+  
+  <div class="error" id="error-box"></div>
+</div>
+
+<script>
+  document.getElementById("request-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const username = document.getElementById("discord-input").value.trim().replace(/^@/, "");
+    const errorBox = document.getElementById("error-box");
+    
+    if (!username) {
+      errorBox.textContent = "Please enter your Discord username.";
+      errorBox.style.display = "block";
+      return;
+    }
+    
+    // Redirect to checkout with username
+    window.location.href = `/request/checkout?username=${encodeURIComponent(username)}`;
+  });
+</script>
+</body>
+</html>
