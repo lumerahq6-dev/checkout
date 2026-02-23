@@ -130,14 +130,25 @@
   </div>
 
   <form id="request-form">
-    <label for="discord-input">Your Discord Username</label>
+    <label for="name-input">Your Preferred Name</label>
     <input
       type="text"
-      id="discord-input"
-      placeholder="e.g. johndoe or john_doe123"
+      id="name-input"
+      placeholder="e.g. John"
       autocomplete="off"
       autocapitalize="none"
       spellcheck="false"
+      required
+    />
+    <label for="request-input">Your Request (max 60 characters)</label>
+    <input
+      type="text"
+      id="request-input"
+      placeholder="Type your request…"
+      maxlength="60"
+      autocomplete="off"
+      autocapitalize="sentences"
+      spellcheck="true"
       required
     />
     <button type="submit">Continue to Payment →</button>
@@ -149,17 +160,30 @@
 <script>
   document.getElementById("request-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    const username = document.getElementById("discord-input").value.trim().replace(/^@/, "");
+    const preferredName = document.getElementById("name-input").value.trim();
+    const requestText = document.getElementById("request-input").value.trim();
     const errorBox = document.getElementById("error-box");
     
-    if (!username) {
-      errorBox.textContent = "Please enter your Discord username.";
+    if (!preferredName) {
+      errorBox.textContent = "Please enter your preferred name.";
+      errorBox.style.display = "block";
+      return;
+    }
+
+    if (!requestText) {
+      errorBox.textContent = "Please enter your request.";
+      errorBox.style.display = "block";
+      return;
+    }
+
+    if (requestText.length > 60) {
+      errorBox.textContent = "Your request must be 60 characters or less.";
       errorBox.style.display = "block";
       return;
     }
     
     // Redirect to checkout with username
-    window.location.href = `/request/checkout?username=${encodeURIComponent(username)}`;
+    window.location.href = `/request/checkout?name=${encodeURIComponent(preferredName)}&request=${encodeURIComponent(requestText)}`;
   });
 </script>
 </body>

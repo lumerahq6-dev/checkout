@@ -268,8 +268,12 @@ app.get("/request", (req, res) => {
 });
 
 app.get("/request/checkout", async (req, res) => {
-  const username = (req.query.username || "").toString().trim().replace(/^@/, "");
-  if (!username) return res.status(400).send("Discord username is required");
+  const preferredName = (req.query.name || "").toString().trim();
+  const requestTextRaw = (req.query.request || "").toString();
+  const requestText = requestTextRaw.trim();
+  if (!preferredName) return res.status(400).send("Preferred name is required");
+  if (!requestText) return res.status(400).send("Request is required");
+  if (requestText.length > 60) return res.status(400).send("Request must be 60 characters or less");
 
   const origin = CHECKOUT_ORIGIN || getPublicOrigin(req);
   if (!CHECKOUT_ORIGIN) {
@@ -287,7 +291,12 @@ app.get("/request/checkout", async (req, res) => {
       mode,
       payment_method_types: ["card"],
       line_items: [{ price: price.id, quantity: 1 }],
-      metadata: { endpoint: "request", tier: "request", discordUsername: username },
+      metadata: {
+        endpoint: "request",
+        tier: "request",
+        preferredName,
+        requestText,
+      },
       success_url: `${origin}/request/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/request`,
     });
@@ -324,7 +333,8 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
     }
   }
 
-  const username = session.metadata?.discordUsername || "Unknown User";
+  const preferredName = session.metadata?.preferredName || "Unknown";
+  const requestText = session.metadata?.requestText || "";
   const channelId = "1475355092323667968";
 
   // Send message to Discord channel using bot token
@@ -340,7 +350,10 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
       headers,
       body: JSON.stringify({
         embeds: [{
-          description: `**${username}** just unlocked a custom request for 99 cents.`,
+          description: `**${preferredName}** just unlocked a custom request for 99 cents.`,
+          fields: requestText
+            ? [{ name: "Request", value: requestText.slice(0, 60) }]
+            : [],
           color: 0x10b981,
           timestamp: new Date().toISOString(),
         }],
@@ -353,8 +366,8 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
       return res.status(500).json({ error: "Failed to send Discord notification" });
     }
 
-    console.log(`✅ Custom request notification sent for ${username}`);
-    return res.json({ success: true, username });
+    console.log(`✅ Custom request notification sent for ${preferredName}`);
+    return res.json({ success: true, preferredName });
   } catch (err) {
     console.error("❌ Failed to send request notification:", err.message);
     return res.status(500).json({ error: "Failed to send notification" });
