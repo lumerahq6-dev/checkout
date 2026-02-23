@@ -13,7 +13,7 @@ const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz
 const CHECKOUT_ORIGIN = (process.env.CHECKOUT_ORIGIN || process.env.DOMAIN || "").replace(/\/+$/, "");
 
 const CUSTOMACCESS_TEST_PRODUCT_ID = process.env.CUSTOMACCESS_TEST_PRODUCT_ID || "prod_U1UD0G3lkaYLxf";
-const REQUEST_PRODUCT_ID = process.env.REQUEST_PRODUCT_ID || "prod_U1UD0G3lkaYLxf";
+const REQUEST_PRODUCT_ID = process.env.REQUEST_PRODUCT_ID || "prod_U1v89duV551rGi";
 const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
 
 app.set("trust proxy", true);
