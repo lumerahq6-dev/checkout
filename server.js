@@ -11,6 +11,8 @@ const MAIN_SITE_ORIGIN = (process.env.MAIN_SITE_ORIGIN || "https://omeglepay.xyz
 const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
 // Public URL of THIS checkout server (required so success URLs are never localhost)
 const CHECKOUT_ORIGIN = (process.env.CHECKOUT_ORIGIN || process.env.DOMAIN || "").replace(/\/+$/, "");
+
+const CUSTOMACCESS_TEST_PRODUCT_ID = process.env.CUSTOMACCESS_TEST_PRODUCT_ID || "prod_U1UD0G3lkaYLxf";
 const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
 
 app.set("trust proxy", true);
@@ -223,6 +225,35 @@ app.get("/customaccess", async (req, res) => {
     res.redirect(303, session.url);
   } catch (err) {
     console.error("❌ Customaccess checkout error:", err.message);
+    res.status(500).send("Failed to create checkout session: " + err.message);
+  }
+});
+
+// ── /customaccess/test → same as /customaccess but forced test product ───────
+app.get("/customaccess/test", async (req, res) => {
+  const origin = CHECKOUT_ORIGIN || getPublicOrigin(req);
+  if (!CHECKOUT_ORIGIN) {
+    console.warn("⚠️  CHECKOUT_ORIGIN not set — success URL may use localhost. Set CHECKOUT_ORIGIN in .env");
+  }
+
+  const productId = CUSTOMACCESS_TEST_PRODUCT_ID;
+  try {
+    const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
+    const price = prices.data[0];
+    if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
+    const mode = price.type === "recurring" ? "subscription" : "payment";
+
+    const session = await stripe.checkout.sessions.create({
+      mode,
+      payment_method_types: ["card"],
+      line_items: [{ price: price.id, quantity: 1 }],
+      metadata: { endpoint: "customaccess", tier: "customaccess", test: "1" },
+      success_url: `${origin}/customaccess/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/`,
+    });
+    res.redirect(303, session.url);
+  } catch (err) {
+    console.error("❌ Customaccess test checkout error:", err.message);
     res.status(500).send("Failed to create checkout session: " + err.message);
   }
 });
