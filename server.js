@@ -39,7 +39,7 @@ const PRODUCTS = {
   basic:   process.env.BASIC_PRODUCT_ID,
   premium: process.env.PREMIUM_PRODUCT_ID,
   test:    process.env.TEST_PRODUCT_ID,
-  customaccess: process.env.CUSTOMACCESS_PRODUCT_ID || "prod_U1gkuTvIfli0ED",
+  customaccess: process.env.CUSTOMACCESS_PRODUCT_ID || "prod_U1vLTDg4tLyXxR",
 };
 
 const BOT_TOKEN = process.env.BOT_TOKEN || "";
