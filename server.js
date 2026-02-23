@@ -263,23 +263,13 @@ app.get("/customaccess/success", (req, res) => {
   res.sendFile(path.join(rootDir, "customaccess-success.html"));
 });
 
-// ── /request → custom request flow (username first, then checkout) ───────────
-app.get("/request", (req, res) => {
-  res.sendFile(path.join(rootDir, "request.html"));
-});
-
-app.get("/request/checkout", async (req, res) => {
+// ── /request → instantly queue Stripe checkout (form lives on omeglepay) ──────
+app.get("/request", async (req, res) => {
   const preferredName = (req.query.name || "").toString().trim();
-  const requestTextRaw = (req.query.request || "").toString();
-  const requestText = requestTextRaw.trim();
+  const requestText   = (req.query.request || "").toString().trim();
   if (!preferredName) return res.status(400).send("Preferred name is required");
-  if (!requestText) return res.status(400).send("Request is required");
+  if (!requestText)   return res.status(400).send("Request is required");
   if (requestText.length > 60) return res.status(400).send("Request must be 60 characters or less");
-
-  const origin = CHECKOUT_ORIGIN || getPublicOrigin(req);
-  if (!CHECKOUT_ORIGIN) {
-    console.warn("⚠️  CHECKOUT_ORIGIN not set — success URL may use localhost. Set CHECKOUT_ORIGIN in .env");
-  }
 
   const productId = REQUEST_PRODUCT_ID;
   try {
@@ -292,24 +282,15 @@ app.get("/request/checkout", async (req, res) => {
       mode,
       payment_method_types: ["card"],
       line_items: [{ price: price.id, quantity: 1 }],
-      metadata: {
-        endpoint: "request",
-        tier: "request",
-        preferredName,
-        requestText,
-      },
-      success_url: `${origin}/request/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/request`,
+      metadata: { endpoint: "request", tier: "request", preferredName, requestText },
+      success_url: `${MAIN_SITE_ORIGIN}/request/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${MAIN_SITE_ORIGIN}/request`,
     });
     res.redirect(303, session.url);
   } catch (err) {
     console.error("❌ Request checkout error:", err.message);
     res.status(500).send("Failed to create checkout session: " + err.message);
   }
-});
-
-app.get("/request/success", (req, res) => {
-  res.sendFile(path.join(rootDir, "request-success.html"));
 });
 
 app.post("/api/send-request-notification", express.json(), async (req, res) => {
