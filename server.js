@@ -9,6 +9,8 @@ const PORT = process.env.PORT || 4000;
 const DOMAIN = (process.env.DOMAIN || "").replace(/\/+$/, "");
 const MAIN_SITE_ORIGIN = (process.env.MAIN_SITE_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
 const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz").replace(/\/+$/, "");
+// Public URL of THIS checkout server (required so success URLs are never localhost)
+const CHECKOUT_ORIGIN = (process.env.CHECKOUT_ORIGIN || process.env.DOMAIN || "").replace(/\/+$/, "");
 const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
 
 app.set("trust proxy", true);
@@ -200,13 +202,16 @@ app.get("/test", async (req, res) => {
 
 // ── /customaccess → Stripe checkout for Discord role grant ──────────
 app.get("/customaccess", async (req, res) => {
+  const origin = CHECKOUT_ORIGIN || getPublicOrigin(req);
+  if (!CHECKOUT_ORIGIN) {
+    console.warn("⚠️  CHECKOUT_ORIGIN not set — success URL may use localhost. Set CHECKOUT_ORIGIN in .env");
+  }
   const productId = PRODUCTS.customaccess;
   try {
     const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
     const price = prices.data[0];
     if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
     const mode = price.type === "recurring" ? "subscription" : "payment";
-    const origin = getPublicOrigin(req);
     const session = await stripe.checkout.sessions.create({
       mode,
       payment_method_types: ["card"],
@@ -415,4 +420,9 @@ app.listen(PORT, () => {
   console.log(`📦 Basic product:   ${PRODUCTS.basic   || "⚠️  NOT SET"}`);
   console.log(`📦 Premium product: ${PRODUCTS.premium || "⚠️  NOT SET"}`);
   console.log(`📦 Test product:    ${PRODUCTS.test    || "⚠️  NOT SET"}`);
+  if (!CHECKOUT_ORIGIN) {
+    console.warn("⚠️  CHECKOUT_ORIGIN is not set — /customaccess success URLs will fall back to request-derived origin (may be localhost). Set CHECKOUT_ORIGIN=https://your-checkout-domain.com in .env");
+  } else {
+    console.log(`🌐 CHECKOUT_ORIGIN: ${CHECKOUT_ORIGIN}`);
+  }
 });
