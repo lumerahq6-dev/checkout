@@ -3,6 +3,9 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const path = require("path");
 const crypto = require("crypto");
+const { Client, GatewayIntentBits } = require("discord.js");
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require("@discordjs/voice");
+const googleTTS = require("google-tts-api");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -13,6 +16,8 @@ const OMEGLEPAY_ORIGIN = (process.env.OMEGLEPAY_ORIGIN || "https://omeglepay.xyz
 const CHECKOUT_ORIGIN = (process.env.CHECKOUT_ORIGIN || process.env.DOMAIN || "").replace(/\/+$/, "");
 
 const CUSTOMACCESS_TEST_PRODUCT_ID = process.env.CUSTOMACCESS_TEST_PRODUCT_ID || "prod_U1UD0G3lkaYLxf";
+const REQUEST_PRICE_ID = "price_1T4ZacHEVolaZx25l8lMR9KP";
+const REQUEST_VC_CHANNEL_ID = "1475001455298478132";
 const REQUEST_PRODUCT_ID = process.env.REQUEST_PRODUCT_ID || "prod_U1v89duV551rGi";
 const CHECKOUT_SECRET = process.env.CHECKOUT_SECRET || "";
 
@@ -271,17 +276,14 @@ app.get("/request", async (req, res) => {
   if (!requestText)   return res.status(400).send("Request is required");
   if (requestText.length > 60) return res.status(400).send("Request must be 60 characters or less");
 
-  const productId = REQUEST_PRODUCT_ID;
   try {
-    const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
-    const price = prices.data[0];
-    if (!price) return res.status(500).send(`No active price found for product ${productId}.`);
+    const price = await stripe.prices.retrieve(REQUEST_PRICE_ID);
     const mode = price.type === "recurring" ? "subscription" : "payment";
 
     const session = await stripe.checkout.sessions.create({
       mode,
       payment_method_types: ["card"],
-      line_items: [{ price: price.id, quantity: 1 }],
+      line_items: [{ price: REQUEST_PRICE_ID, quantity: 1 }],
       metadata: { endpoint: "request", tier: "request", preferredName, requestText },
       success_url: `${MAIN_SITE_ORIGIN}/request/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${MAIN_SITE_ORIGIN}/request`,
@@ -317,9 +319,15 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
 
   const preferredName = session.metadata?.preferredName || "Unknown";
   const requestText = session.metadata?.requestText || "";
+  const amountTotal = typeof session.amount_total === "number" ? session.amount_total : null;
+  const currency = session.currency ? session.currency.toUpperCase() : "USD";
+  const amountText = amountTotal !== null
+    ? `$${(amountTotal / 100).toFixed(2)} ${currency}`
+    : "(unknown amount)";
+  const amountDollars = amountTotal !== null ? (amountTotal / 100).toFixed(2) : "unknown";
   const channelId = "1475355092323667968";
 
-  // Send message to Discord channel using bot token
+  // Send embed to Discord channel using bot token
   try {
     const discordBase = "https://discord.com/api/v10";
     const headers = {
@@ -332,10 +340,13 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
       headers,
       body: JSON.stringify({
         embeds: [{
-          description: `**${preferredName}** just unlocked a custom request for 99 cents.`,
-          fields: requestText
-            ? [{ name: "Request", value: requestText.slice(0, 60) }]
-            : [],
+          description: `**${preferredName}** just unlocked a custom request.`,
+          fields: [
+            { name: "Amount Paid", value: amountText, inline: true },
+            ...(requestText
+              ? [{ name: "Request", value: requestText.slice(0, 60), inline: true }]
+              : []),
+          ],
           color: 0x10b981,
           timestamp: new Date().toISOString(),
         }],
@@ -349,6 +360,16 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
     }
 
     console.log(`✅ Custom request notification sent for ${preferredName}`);
+
+    // Join voice channel and TTS announce
+    try {
+      const ttsText = `${preferredName} spent ${amountDollars} dollars and requested ${requestText}`;
+      await speakInVoiceChannel(ttsText);
+      console.log("✅ TTS announcement played in voice channel");
+    } catch (vcErr) {
+      console.error("⚠️ Voice channel TTS failed (non-fatal):", vcErr.message);
+    }
+
     return res.json({ success: true, preferredName });
   } catch (err) {
     console.error("❌ Failed to send request notification:", err.message);
@@ -545,6 +566,78 @@ app.get("/success", (req, res) => {
 app.get("/", (req, res) => {
   res.sendFile(path.join(rootDir, "index.html"));
 });
+
+// ── Discord.js client for voice channel TTS ─────────────────────────
+const discordClient = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+  ],
+});
+
+let discordReady = false;
+discordClient.once("ready", () => {
+  console.log(`🤖 Discord bot logged in as ${discordClient.user.tag}`);
+  discordReady = true;
+});
+
+if (BOT_TOKEN) {
+  discordClient.login(BOT_TOKEN).catch(err => {
+    console.error("⚠️ Discord bot login failed:", err.message);
+  });
+} else {
+  console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
+}
+
+async function speakInVoiceChannel(text) {
+  if (!discordReady) throw new Error("Discord bot not ready");
+
+  const guild = discordClient.guilds.cache.get(GUILD_ID);
+  if (!guild) throw new Error(`Guild ${GUILD_ID} not found in cache`);
+
+  const voiceChannel = guild.channels.cache.get(REQUEST_VC_CHANNEL_ID);
+  if (!voiceChannel) throw new Error(`Voice channel ${REQUEST_VC_CHANNEL_ID} not found`);
+
+  // Get TTS audio URL from Google
+  const ttsUrl = googleTTS.getAudioUrl(text, {
+    lang: "en",
+    slow: false,
+    host: "https://translate.google.com",
+  });
+
+  // Join the voice channel
+  const connection = joinVoiceChannel({
+    channelId: REQUEST_VC_CHANNEL_ID,
+    guildId: GUILD_ID,
+    adapterCreator: guild.voiceAdapterCreator,
+  });
+
+  // Wait for the connection to be ready
+  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+
+  // Create audio player and play the TTS
+  const player = createAudioPlayer();
+  const resource = createAudioResource(ttsUrl);
+  player.play(resource);
+  connection.subscribe(player);
+
+  // Wait for the audio to finish, then disconnect
+  return new Promise((resolve, reject) => {
+    player.on(AudioPlayerStatus.Idle, () => {
+      connection.destroy();
+      resolve();
+    });
+    player.on("error", (err) => {
+      connection.destroy();
+      reject(err);
+    });
+    // Safety timeout: disconnect after 30s no matter what
+    setTimeout(() => {
+      try { connection.destroy(); } catch {}
+      resolve();
+    }, 30_000);
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 Checkout server running on port ${PORT}`);
