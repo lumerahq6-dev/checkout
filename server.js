@@ -5,7 +5,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { Readable } = require("stream");
 const { Client, GatewayIntentBits } = require("discord.js");
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } = require("@discordjs/voice");
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType, generateDependencyReport } = require("@discordjs/voice");
 const googleTTS = require("google-tts-api");
 
 // Point prism-media / @discordjs/voice at the bundled ffmpeg binary
@@ -604,6 +604,10 @@ app.get("/test-tts-status", (req, res) => {
     guildsInCache: discordClient.guilds?.cache?.size || 0,
     loginError: discordLoginError || null,
   });
+});
+
+app.get("/test-tts-diag", (req, res) => {
+  res.type("text/plain").send(generateDependencyReport());
 });
 
 // ── Discord.js client for voice channel TTS ─────────────────────────
