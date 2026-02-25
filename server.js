@@ -362,15 +362,13 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
     console.log(`✅ Custom request notification sent for ${preferredName}`);
 
     // Join voice channel and TTS announce (skip if under $1 unless name is "tester")
+    // Fire-and-forget so the HTTP response is not blocked by TTS playback
     const shouldTTS = (amountTotal !== null && amountTotal >= 100) || preferredName.toLowerCase() === "tester";
     if (shouldTTS) {
-      try {
-        const ttsText = `${preferredName} spent ${amountDollars} dollars and requested ${requestText}`;
-        await speakInVoiceChannel(ttsText);
-        console.log("✅ TTS announcement played in voice channel");
-      } catch (vcErr) {
-        console.error("⚠️ Voice channel TTS failed (non-fatal):", vcErr.message);
-      }
+      const ttsText = `${preferredName} spent ${amountDollars} dollars and requested ${requestText}`;
+      speakInVoiceChannel(ttsText)
+        .then(() => console.log("✅ TTS announcement played in voice channel"))
+        .catch(vcErr => console.error("⚠️ Voice channel TTS failed (non-fatal):", vcErr.message));
     } else {
       console.log(`⏭️ Skipping TTS — amount $${amountDollars} is under $1 and name is not "tester"`);
     }
@@ -610,6 +608,12 @@ async function speakInVoiceChannel(text) {
     host: "https://translate.google.com",
   });
 
+  // Fetch the audio as a stream (createAudioResource needs a stream, not a URL)
+  const audioRes = await fetch(ttsUrl);
+  if (!audioRes.ok) throw new Error(`Google TTS fetch failed: ${audioRes.status}`);
+  const { Readable } = require("stream");
+  const audioStream = Readable.fromWeb(audioRes.body);
+
   // Join the voice channel
   const connection = joinVoiceChannel({
     channelId: REQUEST_VC_CHANNEL_ID,
@@ -622,7 +626,7 @@ async function speakInVoiceChannel(text) {
 
   // Create audio player and play the TTS
   const player = createAudioPlayer();
-  const resource = createAudioResource(ttsUrl);
+  const resource = createAudioResource(audioStream, { inputType: 0 });
   player.play(resource);
   connection.subscribe(player);
 
