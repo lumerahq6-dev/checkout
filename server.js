@@ -3,9 +3,8 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const path = require("path");
 const crypto = require("crypto");
-const { Readable } = require("stream");
 const { Client, GatewayIntentBits } = require("discord.js");
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType, generateDependencyReport } = require("@discordjs/voice");
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } = require("@discordjs/voice");
 const googleTTS = require("google-tts-api");
 
 // Point prism-media / @discordjs/voice at the bundled ffmpeg binary
@@ -574,56 +573,6 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(rootDir, "index.html"));
 });
 
-// Last test result storage
-let lastTestResult = null;
-
-// ── /test-tts — temporary test endpoint to verify voice channel TTS ──
-app.get("/test-tts", async (req, res) => {
-  const text = req.query.text || "Testing text to speech. If you can hear this, it works.";
-  const mode = req.query.mode || "tone"; // "tone" or "tts"
-  if (!discordReady) return res.status(503).json({ success: false, error: "Discord bot not ready" });
-  lastTestResult = { mode, status: "started", startedAt: new Date().toISOString() };
-  // Respond immediately, run TTS in background
-  res.json({ success: true, message: `TTS triggered (mode=${mode}) — listen in the voice channel` });
-  try {
-    if (mode === "tone") {
-      await playToneInVoiceChannel();
-    } else {
-      await speakInVoiceChannel(text);
-    }
-    lastTestResult = { ...lastTestResult, status: "completed", completedAt: new Date().toISOString() };
-    console.log(`✅ test-tts (${mode}) completed`);
-  } catch (err) {
-    lastTestResult = { ...lastTestResult, status: "error", error: err.message, stack: err.stack, errorAt: new Date().toISOString() };
-    console.error(`❌ test-tts (${mode}) error:`, err);
-  }
-});
-
-app.get("/test-tts-status", (req, res) => {
-  res.json({
-    discordReady,
-    botTag: discordReady ? discordClient.user?.tag : null,
-    hasBotToken: !!BOT_TOKEN,
-    botTokenLength: BOT_TOKEN ? BOT_TOKEN.length : 0,
-    guildId: GUILD_ID,
-    vcChannelId: REQUEST_VC_CHANNEL_ID,
-    guildsInCache: discordClient.guilds?.cache?.size || 0,
-    loginError: discordLoginError || null,
-    lastTestResult,
-  });
-});
-
-app.get("/test-tts-diag", (req, res) => {
-  let daveyStatus = "not checked";
-  try {
-    const davey = require("@snazzah/davey");
-    daveyStatus = `loaded (VERSION=${davey.VERSION}, keys=${Object.keys(davey).length})`;
-  } catch (e) {
-    daveyStatus = `error: ${e.message}`;
-  }
-  res.type("text/plain").send(generateDependencyReport() + `\n\nManual @snazzah/davey check\n- status: ${daveyStatus}`);
-});
-
 // ── Discord.js client for voice channel TTS ─────────────────────────
 const discordClient = new Client({
   intents: [
@@ -644,14 +593,6 @@ discordClient.on("error", (err) => {
   discordLoginError = err.message;
 });
 
-// Check for Opus encoder at startup
-try {
-  const opusCheck = require("opusscript");
-  console.log("✅ opusscript Opus encoder found");
-} catch {
-  console.warn("⚠️ No Opus encoder found — audio will NOT work");
-}
-
 if (BOT_TOKEN) {
   discordClient.login(BOT_TOKEN).catch(err => {
     console.error("⚠️ Discord bot login failed:", err.message);
@@ -659,86 +600,6 @@ if (BOT_TOKEN) {
   });
 } else {
   console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
-}
-
-// ── Generate a test tone → write temp WAV → play via Arbitrary ─────
-async function playToneInVoiceChannel() {
-  if (!discordReady) throw new Error("Discord bot not ready");
-
-  const guild = discordClient.guilds.cache.get(GUILD_ID);
-  if (!guild) throw new Error(`Guild ${GUILD_ID} not found in cache`);
-
-  const fs = require("fs");
-  const os = require("os");
-  const { spawn } = require("child_process");
-
-  // Use ffmpeg to generate a 3-second beep as a WAV file
-  const tmpWav = path.join(os.tmpdir(), `tone_${Date.now()}.wav`);
-  await new Promise((resolve, reject) => {
-    const ff = spawn(ffmpegPath, [
-      "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=3:sample_rate=48000",
-      "-ac", "2", "-ar", "48000",
-      tmpWav,
-    ], { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    ff.stderr.on("data", d => { stderr += d.toString(); });
-    ff.on("close", code => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-200)}`));
-    });
-  });
-
-  const stat = fs.statSync(tmpWav);
-  console.log(`🔊 Generated WAV file: ${tmpWav} (${stat.size} bytes)`);
-  if (lastTestResult) lastTestResult.wavSize = stat.size;
-
-  const connection = joinVoiceChannel({
-    channelId: REQUEST_VC_CHANNEL_ID,
-    guildId: GUILD_ID,
-    adapterCreator: guild.voiceAdapterCreator,
-    selfDeaf: false,
-    selfMute: false,
-  });
-
-  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
-  console.log("🔊 Voice connection ready, state:", connection.state.status);
-  if (lastTestResult) lastTestResult.connectionReady = true;
-
-  const player = createAudioPlayer();
-  // Use Arbitrary — let @discordjs/voice use ffmpeg to transcode WAV
-  const resource = createAudioResource(fs.createReadStream(tmpWav));
-  const subscription = connection.subscribe(player);
-  console.log("🔊 Subscribed:", !!subscription);
-  if (lastTestResult) lastTestResult.subscribed = !!subscription;
-
-  const stateLog = [];
-  player.on("stateChange", (oldState, newState) => {
-    const entry = `${oldState.status}→${newState.status}`;
-    stateLog.push(entry);
-    console.log(`🎵 Player: ${entry}`);
-    if (lastTestResult) lastTestResult.stateLog = stateLog;
-  });
-  player.on("error", (err) => {
-    console.error("🎵 Player error:", err);
-    if (lastTestResult) lastTestResult.playerError = err.message;
-  });
-
-  player.play(resource);
-  console.log("🔊 player.play() called");
-
-  return new Promise((resolve) => {
-    player.on(AudioPlayerStatus.Idle, () => {
-      console.log("🔊 Tone playback finished");
-      try { fs.unlinkSync(tmpWav); } catch {}
-      setTimeout(() => { try { connection.destroy(); } catch {} }, 1000);
-      resolve();
-    });
-    setTimeout(() => {
-      try { fs.unlinkSync(tmpWav); } catch {}
-      try { connection.destroy(); } catch {}
-      resolve();
-    }, 20_000);
-  });
 }
 
 async function speakInVoiceChannel(text) {
