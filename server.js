@@ -577,12 +577,14 @@ app.get("/", (req, res) => {
 // ── /test-tts — temporary test endpoint to verify voice channel TTS ──
 app.get("/test-tts", async (req, res) => {
   const text = req.query.text || "Testing text to speech. If you can hear this, it works.";
+  if (!discordReady) return res.status(503).json({ success: false, error: "Discord bot not ready" });
+  // Respond immediately, run TTS in background
+  res.json({ success: true, message: "TTS triggered — listen in the voice channel" });
   try {
     await speakInVoiceChannel(text);
-    res.json({ success: true, message: "TTS played successfully" });
+    console.log("✅ test-tts completed");
   } catch (err) {
     console.error("❌ test-tts error:", err);
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
   }
 });
 
