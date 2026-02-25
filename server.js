@@ -654,27 +654,36 @@ if (BOT_TOKEN) {
   console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
 }
 
-// ── Generate a test tone via ffmpeg lavfi → OggOpus ────────────────
+// ── Generate a test tone → write temp WAV → play via Arbitrary ─────
 async function playToneInVoiceChannel() {
   if (!discordReady) throw new Error("Discord bot not ready");
 
   const guild = discordClient.guilds.cache.get(GUILD_ID);
   if (!guild) throw new Error(`Guild ${GUILD_ID} not found in cache`);
 
+  const fs = require("fs");
+  const os = require("os");
   const { spawn } = require("child_process");
 
-  // Let ffmpeg generate a 3-second 440Hz sine and encode as OggOpus
-  const ffmpeg = spawn(ffmpegPath, [
-    "-f", "lavfi", "-i", "sine=frequency=440:duration=3:sample_rate=48000",
-    "-ac", "2",
-    "-c:a", "libopus",
-    "-f", "ogg",
-    "pipe:1",
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  // Use ffmpeg to generate a 3-second beep as a WAV file
+  const tmpWav = path.join(os.tmpdir(), `tone_${Date.now()}.wav`);
+  await new Promise((resolve, reject) => {
+    const ff = spawn(ffmpegPath, [
+      "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=3:sample_rate=48000",
+      "-ac", "2", "-ar", "48000",
+      tmpWav,
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    ff.stderr.on("data", d => { stderr += d.toString(); });
+    ff.on("close", code => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-200)}`));
+    });
+  });
 
-  ffmpeg.stderr.on("data", d => console.log("ffmpeg tone stderr:", d.toString()));
-
-  console.log("🔊 Spawned ffmpeg for OggOpus tone generation");
+  const stat = fs.statSync(tmpWav);
+  console.log(`🔊 Generated WAV file: ${tmpWav} (${stat.size} bytes)`);
+  if (lastTestResult) lastTestResult.wavSize = stat.size;
 
   const connection = joinVoiceChannel({
     channelId: REQUEST_VC_CHANNEL_ID,
@@ -685,31 +694,43 @@ async function playToneInVoiceChannel() {
   });
 
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
-  console.log("🔊 Voice connection ready");
+  console.log("🔊 Voice connection ready, state:", connection.state.status);
+  if (lastTestResult) lastTestResult.connectionReady = true;
 
   const player = createAudioPlayer();
-  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.OggOpus });
-  connection.subscribe(player);
-  player.play(resource);
-  console.log("🔊 Player started, resource type:", resource.playbackDuration);
+  // Use Arbitrary — let @discordjs/voice use ffmpeg to transcode WAV
+  const resource = createAudioResource(fs.createReadStream(tmpWav));
+  const subscription = connection.subscribe(player);
+  console.log("🔊 Subscribed:", !!subscription);
+  if (lastTestResult) lastTestResult.subscribed = !!subscription;
 
+  const stateLog = [];
   player.on("stateChange", (oldState, newState) => {
-    console.log(`🎵 Player: ${oldState.status} → ${newState.status}`);
+    const entry = `${oldState.status}→${newState.status}`;
+    stateLog.push(entry);
+    console.log(`🎵 Player: ${entry}`);
+    if (lastTestResult) lastTestResult.stateLog = stateLog;
   });
   player.on("error", (err) => {
     console.error("🎵 Player error:", err);
+    if (lastTestResult) lastTestResult.playerError = err.message;
   });
+
+  player.play(resource);
+  console.log("🔊 player.play() called");
 
   return new Promise((resolve) => {
     player.on(AudioPlayerStatus.Idle, () => {
       console.log("🔊 Tone playback finished");
-      connection.destroy();
+      try { fs.unlinkSync(tmpWav); } catch {}
+      setTimeout(() => { try { connection.destroy(); } catch {} }, 1000);
       resolve();
     });
     setTimeout(() => {
+      try { fs.unlinkSync(tmpWav); } catch {}
       try { connection.destroy(); } catch {}
       resolve();
-    }, 15_000);
+    }, 20_000);
   });
 }
 
