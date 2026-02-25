@@ -657,11 +657,13 @@ async function speakInVoiceChannel(text) {
   fs.writeFileSync(tmpFile, Buffer.from(arrayBuf));
   console.log(`🔊 TTS audio saved: ${tmpFile} (${arrayBuf.byteLength} bytes, ffmpeg: ${ffmpegPath})`);
 
-  // Join the voice channel
+  // Join the voice channel (undeafened + unmuted)
   const connection = joinVoiceChannel({
     channelId: REQUEST_VC_CHANNEL_ID,
     guildId: GUILD_ID,
     adapterCreator: guild.voiceAdapterCreator,
+    selfDeaf: false,
+    selfMute: false,
   });
 
   // Wait for the connection to be ready
