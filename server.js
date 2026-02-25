@@ -614,7 +614,14 @@ app.get("/test-tts-status", (req, res) => {
 });
 
 app.get("/test-tts-diag", (req, res) => {
-  res.type("text/plain").send(generateDependencyReport());
+  let daveyStatus = "not checked";
+  try {
+    const davey = require("@snazzah/davey");
+    daveyStatus = `loaded (VERSION=${davey.VERSION}, keys=${Object.keys(davey).length})`;
+  } catch (e) {
+    daveyStatus = `error: ${e.message}`;
+  }
+  res.type("text/plain").send(generateDependencyReport() + `\n\nManual @snazzah/davey check\n- status: ${daveyStatus}`);
 });
 
 // ── Discord.js client for voice channel TTS ─────────────────────────
