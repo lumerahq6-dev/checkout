@@ -644,13 +644,15 @@ async function speakInVoiceChannel(text) {
     host: "https://translate.google.com",
   });
 
-  // Fetch the audio as a buffer, then wrap in a readable stream
+  // Download to a temp MP3 file
+  const fs = require("fs");
+  const os = require("os");
+  const tmpFile = path.join(os.tmpdir(), `tts-${Date.now()}.mp3`);
   const audioRes = await fetch(ttsUrl);
   if (!audioRes.ok) throw new Error(`Google TTS fetch failed: ${audioRes.status}`);
   const arrayBuf = await audioRes.arrayBuffer();
-  const audioBuffer = Buffer.from(arrayBuf);
-  console.log(`🔊 TTS audio fetched: ${audioBuffer.length} bytes`);
-  const audioStream = Readable.from(audioBuffer);
+  fs.writeFileSync(tmpFile, Buffer.from(arrayBuf));
+  console.log(`🔊 TTS audio saved: ${tmpFile} (${arrayBuf.byteLength} bytes)`);
 
   // Join the voice channel
   const connection = joinVoiceChannel({
@@ -662,25 +664,28 @@ async function speakInVoiceChannel(text) {
   // Wait for the connection to be ready
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
-  // Create audio player and play the TTS
+  // Create audio player and play from file
   const player = createAudioPlayer();
-  const resource = createAudioResource(audioStream, { inputType: 0 });
+  const resource = createAudioResource(tmpFile);
   player.play(resource);
   connection.subscribe(player);
 
-  // Wait for the audio to finish, then disconnect
+  // Wait for the audio to finish, then disconnect and clean up
   return new Promise((resolve, reject) => {
     player.on(AudioPlayerStatus.Idle, () => {
       connection.destroy();
+      try { fs.unlinkSync(tmpFile); } catch {}
       resolve();
     });
     player.on("error", (err) => {
       connection.destroy();
+      try { fs.unlinkSync(tmpFile); } catch {}
       reject(err);
     });
     // Safety timeout: disconnect after 30s no matter what
     setTimeout(() => {
       try { connection.destroy(); } catch {}
+      try { fs.unlinkSync(tmpFile); } catch {}
       resolve();
     }, 30_000);
   });
