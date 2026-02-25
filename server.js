@@ -626,6 +626,14 @@ discordClient.on("error", (err) => {
   discordLoginError = err.message;
 });
 
+// Check for Opus encoder at startup
+try {
+  const opusCheck = require("opusscript");
+  console.log("✅ opusscript Opus encoder found");
+} catch {
+  console.warn("⚠️ No Opus encoder found — audio will NOT work");
+}
+
 if (BOT_TOKEN) {
   discordClient.login(BOT_TOKEN).catch(err => {
     console.error("⚠️ Discord bot login failed:", err.message);
