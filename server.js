@@ -150,7 +150,7 @@ app.post("/api/claim-key", express.json(), async (req, res) => {
       const tier = session.metadata?.tier || "basic";
       const key = generateAccessKey();
 
-      // Persist the key on omeglepay so pornyard can redeem it
+      // Persist the key on omeglepay so the main site can redeem it
       if (CHECKOUT_SECRET && OMEGLEPAY_ORIGIN) {
         try {
           await fetch(`${OMEGLEPAY_ORIGIN}/api/store-key`, {
