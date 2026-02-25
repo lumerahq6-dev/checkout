@@ -3,9 +3,13 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const path = require("path");
 const crypto = require("crypto");
+const { Readable } = require("stream");
 const { Client, GatewayIntentBits } = require("discord.js");
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require("@discordjs/voice");
 const googleTTS = require("google-tts-api");
+
+// Point prism-media / @discordjs/voice at the bundled ffmpeg binary
+process.env.FFMPEG_PATH = process.env.FFMPEG_PATH || require("ffmpeg-static");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -570,6 +574,18 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(rootDir, "index.html"));
 });
 
+// ── /test-tts — temporary test endpoint to verify voice channel TTS ──
+app.get("/test-tts", async (req, res) => {
+  const text = req.query.text || "Testing text to speech. If you can hear this, it works.";
+  try {
+    await speakInVoiceChannel(text);
+    res.json({ success: true, message: "TTS played successfully" });
+  } catch (err) {
+    console.error("❌ test-tts error:", err);
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
+
 // ── Discord.js client for voice channel TTS ─────────────────────────
 const discordClient = new Client({
   intents: [
@@ -608,11 +624,13 @@ async function speakInVoiceChannel(text) {
     host: "https://translate.google.com",
   });
 
-  // Fetch the audio as a stream (createAudioResource needs a stream, not a URL)
+  // Fetch the audio as a buffer, then wrap in a readable stream
   const audioRes = await fetch(ttsUrl);
   if (!audioRes.ok) throw new Error(`Google TTS fetch failed: ${audioRes.status}`);
-  const { Readable } = require("stream");
-  const audioStream = Readable.fromWeb(audioRes.body);
+  const arrayBuf = await audioRes.arrayBuffer();
+  const audioBuffer = Buffer.from(arrayBuf);
+  console.log(`🔊 TTS audio fetched: ${audioBuffer.length} bytes`);
+  const audioStream = Readable.from(audioBuffer);
 
   // Join the voice channel
   const connection = joinVoiceChannel({
