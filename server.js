@@ -574,11 +574,15 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(rootDir, "index.html"));
 });
 
+// Last test result storage
+let lastTestResult = null;
+
 // ── /test-tts — temporary test endpoint to verify voice channel TTS ──
 app.get("/test-tts", async (req, res) => {
   const text = req.query.text || "Testing text to speech. If you can hear this, it works.";
   const mode = req.query.mode || "tone"; // "tone" or "tts"
   if (!discordReady) return res.status(503).json({ success: false, error: "Discord bot not ready" });
+  lastTestResult = { mode, status: "started", startedAt: new Date().toISOString() };
   // Respond immediately, run TTS in background
   res.json({ success: true, message: `TTS triggered (mode=${mode}) — listen in the voice channel` });
   try {
@@ -587,8 +591,10 @@ app.get("/test-tts", async (req, res) => {
     } else {
       await speakInVoiceChannel(text);
     }
+    lastTestResult = { ...lastTestResult, status: "completed", completedAt: new Date().toISOString() };
     console.log(`✅ test-tts (${mode}) completed`);
   } catch (err) {
+    lastTestResult = { ...lastTestResult, status: "error", error: err.message, stack: err.stack, errorAt: new Date().toISOString() };
     console.error(`❌ test-tts (${mode}) error:`, err);
   }
 });
@@ -603,6 +609,7 @@ app.get("/test-tts-status", (req, res) => {
     vcChannelId: REQUEST_VC_CHANNEL_ID,
     guildsInCache: discordClient.guilds?.cache?.size || 0,
     loginError: discordLoginError || null,
+    lastTestResult,
   });
 });
 
