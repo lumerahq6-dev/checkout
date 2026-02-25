@@ -577,14 +577,19 @@ app.get("/", (req, res) => {
 // ── /test-tts — temporary test endpoint to verify voice channel TTS ──
 app.get("/test-tts", async (req, res) => {
   const text = req.query.text || "Testing text to speech. If you can hear this, it works.";
+  const mode = req.query.mode || "tone"; // "tone" or "tts"
   if (!discordReady) return res.status(503).json({ success: false, error: "Discord bot not ready" });
   // Respond immediately, run TTS in background
-  res.json({ success: true, message: "TTS triggered — listen in the voice channel" });
+  res.json({ success: true, message: `TTS triggered (mode=${mode}) — listen in the voice channel` });
   try {
-    await speakInVoiceChannel(text);
-    console.log("✅ test-tts completed");
+    if (mode === "tone") {
+      await playToneInVoiceChannel();
+    } else {
+      await speakInVoiceChannel(text);
+    }
+    console.log(`✅ test-tts (${mode}) completed`);
   } catch (err) {
-    console.error("❌ test-tts error:", err);
+    console.error(`❌ test-tts (${mode}) error:`, err);
   }
 });
 
@@ -628,6 +633,63 @@ if (BOT_TOKEN) {
   });
 } else {
   console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
+}
+
+// ── Generate a raw PCM sine wave tone (no deps) ────────────────────
+async function playToneInVoiceChannel() {
+  if (!discordReady) throw new Error("Discord bot not ready");
+
+  const guild = discordClient.guilds.cache.get(GUILD_ID);
+  if (!guild) throw new Error(`Guild ${GUILD_ID} not found in cache`);
+
+  // Generate 3 seconds of 440Hz sine wave at 48kHz, stereo, s16le
+  const sampleRate = 48000;
+  const channels = 2;
+  const duration = 3; // seconds
+  const frequency = 440;
+  const totalSamples = sampleRate * duration;
+  const buf = Buffer.alloc(totalSamples * channels * 2); // 2 bytes per sample
+  for (let i = 0; i < totalSamples; i++) {
+    const sample = Math.round(16000 * Math.sin(2 * Math.PI * frequency * i / sampleRate));
+    const offset = i * channels * 2;
+    buf.writeInt16LE(sample, offset);     // left
+    buf.writeInt16LE(sample, offset + 2); // right
+  }
+  console.log(`🔊 Generated ${buf.length} bytes of raw PCM tone`);
+  const audioStream = Readable.from(buf);
+
+  const connection = joinVoiceChannel({
+    channelId: REQUEST_VC_CHANNEL_ID,
+    guildId: GUILD_ID,
+    adapterCreator: guild.voiceAdapterCreator,
+    selfDeaf: false,
+    selfMute: false,
+  });
+
+  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+
+  const player = createAudioPlayer();
+  const resource = createAudioResource(audioStream, { inputType: StreamType.Raw });
+  player.play(resource);
+  connection.subscribe(player);
+
+  player.on("stateChange", (oldState, newState) => {
+    console.log(`🎵 Player: ${oldState.status} → ${newState.status}`);
+  });
+  player.on("error", (err) => {
+    console.error("🎵 Player error:", err);
+  });
+
+  return new Promise((resolve) => {
+    player.on(AudioPlayerStatus.Idle, () => {
+      connection.destroy();
+      resolve();
+    });
+    setTimeout(() => {
+      try { connection.destroy(); } catch {}
+      resolve();
+    }, 15_000);
+  });
 }
 
 async function speakInVoiceChannel(text) {
