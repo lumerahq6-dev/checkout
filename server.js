@@ -361,13 +361,18 @@ app.post("/api/send-request-notification", express.json(), async (req, res) => {
 
     console.log(`✅ Custom request notification sent for ${preferredName}`);
 
-    // Join voice channel and TTS announce
-    try {
-      const ttsText = `${preferredName} spent ${amountDollars} dollars and requested ${requestText}`;
-      await speakInVoiceChannel(ttsText);
-      console.log("✅ TTS announcement played in voice channel");
-    } catch (vcErr) {
-      console.error("⚠️ Voice channel TTS failed (non-fatal):", vcErr.message);
+    // Join voice channel and TTS announce (skip if under $1 unless name is "tester")
+    const shouldTTS = (amountTotal !== null && amountTotal >= 100) || preferredName.toLowerCase() === "tester";
+    if (shouldTTS) {
+      try {
+        const ttsText = `${preferredName} spent ${amountDollars} dollars and requested ${requestText}`;
+        await speakInVoiceChannel(ttsText);
+        console.log("✅ TTS announcement played in voice channel");
+      } catch (vcErr) {
+        console.error("⚠️ Voice channel TTS failed (non-fatal):", vcErr.message);
+      }
+    } else {
+      console.log(`⏭️ Skipping TTS — amount $${amountDollars} is under $1 and name is not "tester"`);
     }
 
     return res.json({ success: true, preferredName });
