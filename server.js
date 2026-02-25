@@ -5,11 +5,11 @@ const path = require("path");
 const crypto = require("crypto");
 const { Readable } = require("stream");
 const { Client, GatewayIntentBits } = require("discord.js");
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require("@discordjs/voice");
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } = require("@discordjs/voice");
 const googleTTS = require("google-tts-api");
 
 // Point prism-media / @discordjs/voice at the bundled ffmpeg binary
-process.env.FFMPEG_PATH = process.env.FFMPEG_PATH || require("ffmpeg-static");
+const ffmpegPath = process.env.FFMPEG_PATH || require("ffmpeg-static");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -647,12 +647,13 @@ async function speakInVoiceChannel(text) {
   // Download to a temp MP3 file
   const fs = require("fs");
   const os = require("os");
+  const { spawn } = require("child_process");
   const tmpFile = path.join(os.tmpdir(), `tts-${Date.now()}.mp3`);
   const audioRes = await fetch(ttsUrl);
   if (!audioRes.ok) throw new Error(`Google TTS fetch failed: ${audioRes.status}`);
   const arrayBuf = await audioRes.arrayBuffer();
   fs.writeFileSync(tmpFile, Buffer.from(arrayBuf));
-  console.log(`🔊 TTS audio saved: ${tmpFile} (${arrayBuf.byteLength} bytes)`);
+  console.log(`🔊 TTS audio saved: ${tmpFile} (${arrayBuf.byteLength} bytes, ffmpeg: ${ffmpegPath})`);
 
   // Join the voice channel
   const connection = joinVoiceChannel({
@@ -664,30 +665,34 @@ async function speakInVoiceChannel(text) {
   // Wait for the connection to be ready
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
-  // Create audio player and play from file
+  // Spawn ffmpeg to convert MP3 → raw s16le PCM at 48kHz stereo (Discord format)
+  const ffmpeg = spawn(ffmpegPath, [
+    "-i", tmpFile,
+    "-f", "s16le",
+    "-ar", "48000",
+    "-ac", "2",
+    "pipe:1",
+  ]);
+
+  ffmpeg.stderr.on("data", (d) => console.log("ffmpeg:", d.toString().trim()));
+
+  // Create audio player and play raw PCM stream
   const player = createAudioPlayer();
-  const resource = createAudioResource(tmpFile);
+  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.Raw });
   player.play(resource);
   connection.subscribe(player);
 
   // Wait for the audio to finish, then disconnect and clean up
   return new Promise((resolve, reject) => {
-    player.on(AudioPlayerStatus.Idle, () => {
-      connection.destroy();
-      try { fs.unlinkSync(tmpFile); } catch {}
-      resolve();
-    });
-    player.on("error", (err) => {
-      connection.destroy();
-      try { fs.unlinkSync(tmpFile); } catch {}
-      reject(err);
-    });
-    // Safety timeout: disconnect after 30s no matter what
-    setTimeout(() => {
+    const cleanup = () => {
       try { connection.destroy(); } catch {}
+      try { ffmpeg.kill(); } catch {}
       try { fs.unlinkSync(tmpFile); } catch {}
-      resolve();
-    }, 30_000);
+    };
+    player.on(AudioPlayerStatus.Idle, () => { cleanup(); resolve(); });
+    player.on("error", (err) => { cleanup(); reject(err); });
+    // Safety timeout: disconnect after 30s no matter what
+    setTimeout(() => { cleanup(); resolve(); }, 30_000);
   });
 }
 
