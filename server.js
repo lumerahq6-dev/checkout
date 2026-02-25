@@ -586,6 +586,19 @@ app.get("/test-tts", async (req, res) => {
   }
 });
 
+app.get("/test-tts-status", (req, res) => {
+  res.json({
+    discordReady,
+    botTag: discordReady ? discordClient.user?.tag : null,
+    hasBotToken: !!BOT_TOKEN,
+    botTokenLength: BOT_TOKEN ? BOT_TOKEN.length : 0,
+    guildId: GUILD_ID,
+    vcChannelId: REQUEST_VC_CHANNEL_ID,
+    guildsInCache: discordClient.guilds?.cache?.size || 0,
+    loginError: discordLoginError || null,
+  });
+});
+
 // ── Discord.js client for voice channel TTS ─────────────────────────
 const discordClient = new Client({
   intents: [
@@ -595,14 +608,21 @@ const discordClient = new Client({
 });
 
 let discordReady = false;
+let discordLoginError = null;
 discordClient.once("ready", () => {
   console.log(`🤖 Discord bot logged in as ${discordClient.user.tag}`);
   discordReady = true;
 });
 
+discordClient.on("error", (err) => {
+  console.error("❌ Discord client error:", err.message);
+  discordLoginError = err.message;
+});
+
 if (BOT_TOKEN) {
   discordClient.login(BOT_TOKEN).catch(err => {
     console.error("⚠️ Discord bot login failed:", err.message);
+    discordLoginError = err.message;
   });
 } else {
   console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
