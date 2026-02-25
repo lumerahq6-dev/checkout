@@ -647,28 +647,27 @@ if (BOT_TOKEN) {
   console.warn("⚠️ BOT_TOKEN not set — voice TTS will not work");
 }
 
-// ── Generate a raw PCM sine wave tone (no deps) ────────────────────
+// ── Generate a test tone via ffmpeg lavfi → OggOpus ────────────────
 async function playToneInVoiceChannel() {
   if (!discordReady) throw new Error("Discord bot not ready");
 
   const guild = discordClient.guilds.cache.get(GUILD_ID);
   if (!guild) throw new Error(`Guild ${GUILD_ID} not found in cache`);
 
-  // Generate 3 seconds of 440Hz sine wave at 48kHz, stereo, s16le
-  const sampleRate = 48000;
-  const channels = 2;
-  const duration = 3; // seconds
-  const frequency = 440;
-  const totalSamples = sampleRate * duration;
-  const buf = Buffer.alloc(totalSamples * channels * 2); // 2 bytes per sample
-  for (let i = 0; i < totalSamples; i++) {
-    const sample = Math.round(16000 * Math.sin(2 * Math.PI * frequency * i / sampleRate));
-    const offset = i * channels * 2;
-    buf.writeInt16LE(sample, offset);     // left
-    buf.writeInt16LE(sample, offset + 2); // right
-  }
-  console.log(`🔊 Generated ${buf.length} bytes of raw PCM tone`);
-  const audioStream = Readable.from(buf);
+  const { spawn } = require("child_process");
+
+  // Let ffmpeg generate a 3-second 440Hz sine and encode as OggOpus
+  const ffmpeg = spawn(ffmpegPath, [
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=3:sample_rate=48000",
+    "-ac", "2",
+    "-c:a", "libopus",
+    "-f", "ogg",
+    "pipe:1",
+  ], { stdio: ["ignore", "pipe", "pipe"] });
+
+  ffmpeg.stderr.on("data", d => console.log("ffmpeg tone stderr:", d.toString()));
+
+  console.log("🔊 Spawned ffmpeg for OggOpus tone generation");
 
   const connection = joinVoiceChannel({
     channelId: REQUEST_VC_CHANNEL_ID,
@@ -679,11 +678,13 @@ async function playToneInVoiceChannel() {
   });
 
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+  console.log("🔊 Voice connection ready");
 
   const player = createAudioPlayer();
-  const resource = createAudioResource(audioStream, { inputType: StreamType.Raw });
-  player.play(resource);
+  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.OggOpus });
   connection.subscribe(player);
+  player.play(resource);
+  console.log("🔊 Player started, resource type:", resource.playbackDuration);
 
   player.on("stateChange", (oldState, newState) => {
     console.log(`🎵 Player: ${oldState.status} → ${newState.status}`);
@@ -694,6 +695,7 @@ async function playToneInVoiceChannel() {
 
   return new Promise((resolve) => {
     player.on(AudioPlayerStatus.Idle, () => {
+      console.log("🔊 Tone playback finished");
       connection.destroy();
       resolve();
     });
