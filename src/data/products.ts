@@ -18,6 +18,7 @@ export interface Product {
   isFeatured?: boolean;
   isSubscription?: boolean;
   billingCycle?: string;
+  paddlePriceId?: string;
 }
 
 export const products: Product[] = [

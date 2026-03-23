@@ -31,7 +31,6 @@ export default function ProductDetail({ product }: ProductDetailProps) {
   const [imageIndex, setImageIndex] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [addedFeedback, setAddedFeedback] = useState(false);
 
   const variants = product.variants ?? [];
   const [selectedVariant, setSelectedVariant] = useState(
@@ -64,9 +63,23 @@ export default function ProductDetail({ product }: ProductDetailProps) {
   const incrementQty = () => setQuantity((q) => Math.min(99, q + 1));
   const decrementQty = () => setQuantity((q) => Math.max(1, q - 1));
 
-  const handleAddToCart = () => {
-    setAddedFeedback(true);
-    setTimeout(() => setAddedFeedback(false), 2200);
+  const handleBuy = () => {
+    if (!product.paddlePriceId) {
+      alert("This product is not available for purchase yet.");
+      return;
+    }
+    if (!window.Paddle) {
+      alert("Checkout is loading, please try again in a moment.");
+      return;
+    }
+    window.Paddle.Checkout.open({
+      items: [{ priceId: product.paddlePriceId, quantity }],
+      customData: { productSlug: product.slug },
+      settings: {
+        displayMode: "overlay",
+        theme: "dark",
+      },
+    });
   };
 
   return (
@@ -209,14 +222,10 @@ export default function ProductDetail({ product }: ProductDetailProps) {
             <div className="mt-10">
               <button
                 type="button"
-                onClick={handleAddToCart}
+                onClick={handleBuy}
                 className="w-full rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                {addedFeedback
-                  ? "Added — open cart to checkout"
-                  : product.isSubscription
-                    ? "Subscribe now"
-                    : "Add to cart"}
+                {product.isSubscription ? "Subscribe now" : "Buy now"}
               </button>
             </div>
           </div>
