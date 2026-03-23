@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Successful</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0e0e14;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    .card {
+      background: #1a1a2e;
+      border: 1px solid #2d2d4e;
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+    }
+    .icon { font-size: 56px; margin-bottom: 20px; }
+    h1 { font-size: 2rem; font-weight: 900; color: #10b981; margin-bottom: 12px; }
+    .sub { color: #94a3b8; font-size: 1rem; line-height: 1.6; margin-bottom: 20px; }
+    .key-box {
+      background: rgba(124, 58, 237, 0.12);
+      border: 2px solid rgba(124, 58, 237, 0.4);
+      border-radius: 14px;
+      padding: 20px 28px;
+      margin: 20px 0;
+    }
+    .key-label {
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: #c084fc; margin-bottom: 10px;
+    }
+    .key-value {
+      font-size: 1.8rem; font-weight: 900; letter-spacing: 3px;
+      font-family: 'Courier New', monospace; color: #fff; user-select: all;
+      word-break: break-all;
+    }
+    .copy-btn {
+      display: inline-block; margin-top: 14px; padding: 10px 24px;
+      border: 1px solid rgba(124, 58, 237, 0.5); border-radius: 8px;
+      background: rgba(124, 58, 237, 0.2); color: #c4b5fd;
+      font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .copy-btn:hover { background: rgba(124, 58, 237, 0.35); color: #e8e0ff; }
+    .spinner {
+      display: inline-block; width: 48px; height: 48px;
+      border: 4px solid rgba(124,58,237,0.2); border-top-color: #7c3aed;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-icon { font-size: 56px; margin-bottom: 16px; }
+    .error-msg { color: #fca5a5; font-size: 1rem; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div id="loading">
+    <div class="spinner"></div>
+    <p class="sub">Verifying your payment...</p>
+  </div>
+
+  <div id="success" style="display:none">
+    <div class="icon">&#10004;</div>
+    <h1>Payment Successful!</h1>
+    <p class="sub">Your <strong id="tier-label">Basic</strong> access key is ready.</p>
+    <div class="key-box">
+      <div class="key-label">Your Access Key</div>
+      <div class="key-value" id="access-key">--------</div>
+      <button class="copy-btn" id="copy-btn">Copy Key</button>
+    </div>
+  </div>
+
+  <div id="error" style="display:none">
+    <div class="error-icon">&#10060;</div>
+    <p class="error-msg" id="error-msg">Something went wrong.</p>
+  </div>
+</div>
+
+<script>
+  var txnId = new URLSearchParams(location.search).get("txn") || new URLSearchParams(location.search).get("session_id");
+
+  function show(id) {
+    ["loading","success","error"].forEach(function(s) {
+      document.getElementById(s).style.display = s === id ? "" : "none";
+    });
+  }
+
+  function showError(msg) {
+    document.getElementById("error-msg").textContent = msg;
+    show("error");
+  }
+
+  async function claimKey() {
+    if (!txnId) { showError("Missing transaction ID."); return; }
+    var lastError = "";
+    for (var i = 0; i < 5; i++) {
+      try {
+        var res = await fetch("/api/claim-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactionId: txnId }),
+        });
+        var data = await res.json();
+        if (res.ok && data.key) {
+          document.getElementById("access-key").textContent = data.key;
+          document.getElementById("tier-label").textContent =
+            data.tier === "premium" ? "Premium" : "Basic";
+          show("success");
+          return;
+        }
+        lastError = data.error || "Unknown error";
+        if (res.status === 402) { await new Promise(function(r){setTimeout(r,2000)}); continue; }
+        break;
+      } catch(e) {
+        lastError = "Connection error";
+        await new Promise(function(r){setTimeout(r,2000)});
+      }
+    }
+    showError(lastError || "Failed to retrieve your access key. Please contact support.");
+  }
+
+  document.getElementById("copy-btn").addEventListener("click", function() {
+    var key = document.getElementById("access-key").textContent;
+    navigator.clipboard.writeText(key).then(function() {
+      var btn = document.getElementById("copy-btn");
+      btn.textContent = "Copied!";
+      setTimeout(function(){ btn.textContent = "Copy Key"; }, 2000);
+    });
+  });
+
+  claimKey();
+</script>
+</body>
+</html>

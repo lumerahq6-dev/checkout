@@ -126,7 +126,7 @@
 </div>
 
 <script>
-  const sessionId = new URLSearchParams(location.search).get("session_id");
+  const txnId = new URLSearchParams(location.search).get("txn") || new URLSearchParams(location.search).get("session_id");
 
   function show(id) {
     ["verifying","form-section","success-section","error-section"].forEach(s => {
@@ -141,15 +141,13 @@
     el.innerHTML = msg;
   }
 
-  async function verifySession() {
-    if (!sessionId) { show("error-section"); return; }
+  async function verifyTransaction() {
+    if (!txnId) { show("error-section"); return; }
     try {
-      // Lightweight check — server will validate again on grant
-      const r = await fetch("/api/verify-session?sessionId=" + encodeURIComponent(sessionId));
+      const r = await fetch("/api/verify-transaction?txn=" + encodeURIComponent(txnId));
       if (r.ok) { show("form-section"); }
       else { show("error-section"); }
     } catch {
-      // If endpoint doesn't exist, optimistically show the form; grant endpoint re-validates
       show("form-section");
     }
   }
@@ -167,7 +165,7 @@
       const r = await fetch("/api/grant-discord-role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, discordUsername: username }),
+        body: JSON.stringify({ transactionId: txnId, discordUsername: username }),
       });
       const data = await r.json();
       if (r.ok && data.success) {
@@ -188,7 +186,7 @@
     if (e.key === "Enter") document.getElementById("claim-btn").click();
   });
 
-  verifySession();
+  verifyTransaction();
 </script>
 </body>
 </html>
