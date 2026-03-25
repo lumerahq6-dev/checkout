@@ -25,6 +25,12 @@ const footerLinks = [
   { href: "https://discord.gg/p3KEQVKNHW", label: "Discord", external: true },
 ];
 
+const legalLinks = [
+  { href: "/terms", label: "Terms & Conditions" },
+  { href: "/refund-policy", label: "Refund Policy" },
+  { href: "/privacy", label: "Privacy Policy" },
+];
+
 export default function Footer() {
   return (
     <footer className="border-t border-border-primary bg-bg-secondary">
@@ -71,12 +77,20 @@ export default function Footer() {
                   {link.label}
                 </Link>
               ))}
-              <Link
-                href="#"
-                className="text-sm text-text-secondary hover:text-text-primary transition-colors"
-              >
-                Privacy policy
-              </Link>
+            </nav>
+            <h3 className="text-sm font-semibold tracking-wider uppercase text-text-primary mb-3 mt-6">
+              Legal
+            </h3>
+            <nav className="flex flex-col gap-2.5">
+              {legalLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
             </nav>
           </div>
 

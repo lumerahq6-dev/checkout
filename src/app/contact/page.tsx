@@ -139,6 +139,30 @@ export default function ContactPage() {
             </form>
           )}
         </div>
+
+        <div className="relative z-10 mx-auto mt-10 w-full max-w-[600px] animate-fade-in-up stagger-4 [animation-fill-mode:both]">
+          <div className="rounded-xl border border-border-primary bg-bg-card/60 p-6 text-center backdrop-blur-sm">
+            <p className="text-sm font-medium text-text-primary">
+              You can also reach us directly
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-center sm:gap-6">
+              <a
+                href="mailto:lumerahq6@gmail.com"
+                className="text-sm text-accent hover:text-accent-hover transition-colors"
+              >
+                lumerahq6@gmail.com
+              </a>
+              <a
+                href="https://t.me/bossboy21"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-accent hover:text-accent-hover transition-colors"
+              >
+                @bossboy21 on Telegram
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
