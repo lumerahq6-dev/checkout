@@ -16,6 +16,8 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Next.js may omit public/; standalone image still expects this path
+RUN mkdir -p public
 ENV NODE_ENV=production
 RUN npm run build
 
