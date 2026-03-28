@@ -86,6 +86,7 @@ export const products: Product[] = [
     shortTitle: "Cinematic Transitions",
     price: 3.99,
     currency: "USD",
+    paddlePriceId: "pri_01kmsx9r6rv9m84fhnf3gt3r9r",
     description:
       "120+ handcrafted cinematic transitions designed for professional editors. Includes whip pans, light leaks, glitch cuts, zoom transitions, and film burn effects. Drag and drop directly into your timeline — works standalone or integrated with the Kaimatsu plugin.",
     features: [
@@ -108,6 +109,7 @@ export const products: Product[] = [
     shortTitle: "Sound Effects Library",
     price: 3.99,
     currency: "USD",
+    paddlePriceId: "pri_01kmsxbsh993k211ydd40641z3",
     description:
       "200+ royalty-free sound effects curated for video editors. Whooshes, impacts, risers, UI sounds, ambient textures, and more. Organized by category and ready to drop into your timeline. Every sound is original and cleared for commercial use.",
     features: [
@@ -130,6 +132,7 @@ export const products: Product[] = [
     shortTitle: "LUT Collection",
     price: 3.99,
     currency: "USD",
+    paddlePriceId: "pri_01kmsxfd5qw34va758r3zwzbw3",
     description:
       "50+ cinematic color grades designed for modern content. From warm analog film looks to cold desaturated tones — every LUT is built to work across a range of footage and lighting conditions. Previews included so you can browse before applying.",
     features: [
@@ -155,6 +158,7 @@ export const products: Product[] = [
     isSubscription: true,
     billingCycle: "/mo",
     isFeatured: true,
+    paddlePriceId: "pri_01kmsxh198avpws6bd1jvbk2gb",
     description:
       "Get direct access to me in a private Discord channel. Weekly group sessions, personalized feedback on your edits, workflow reviews, and priority Q&A. This is for editors who want to accelerate their growth with hands-on guidance — not just tutorials.",
     features: [
