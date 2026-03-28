@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useCart } from "@/context/CartContext";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -18,7 +17,6 @@ const navLinks = [
 
 export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { itemCount: cartCount } = useCart();
 
   return (
     <header className="sticky top-0 z-50 bg-bg-primary/90 backdrop-blur-xl border-b border-border-primary">
@@ -84,32 +82,6 @@ export default function Header() {
                 <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
-            </Link>
-
-            <Link
-              href="/cart"
-              className="relative text-sm text-text-secondary hover:text-text-primary transition-colors duration-200"
-              aria-label="Cart"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-                <path d="M3 6h18" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-              {cartCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[1rem] h-4 px-1 rounded-full bg-accent text-[10px] font-bold flex items-center justify-center text-white">
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
             </Link>
 
             <button

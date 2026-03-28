@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useCart } from "@/context/CartContext";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatPrice, getProductBySlug } from "@/data/products";
 
 function openPaddle(items: { priceId: string; quantity: number }[]) {
@@ -23,38 +22,54 @@ function openPaddle(items: { priceId: string; quantity: number }[]) {
 export default function CheckoutContent() {
   const searchParams = useSearchParams();
   const slug = searchParams.get("slug");
-  const { items: cartItems, clear } = useCart();
-  const [qty, setQty] = useState(1);
+  const autoOpen = searchParams.get("auto") === "1";
+
+  const initialQty = useMemo(() => {
+    const raw = searchParams.get("qty");
+    const n = parseInt(raw || "1", 10);
+    if (Number.isNaN(n)) return 1;
+    return Math.min(99, Math.max(1, n));
+  }, [searchParams]);
+
+  const [qty, setQty] = useState(initialQty);
+  const [paddleOpened, setPaddleOpened] = useState(false);
+  const qtyRef = useRef(qty);
+  qtyRef.current = qty;
 
   const productFromQuery = useMemo(
     () => (slug ? getProductBySlug(slug) : undefined),
     [slug]
   );
 
-  const singlePaddleItems = useMemo(() => {
-    if (!productFromQuery?.paddlePriceId) return null;
-    return [{ priceId: productFromQuery.paddlePriceId, quantity: qty }];
-  }, [productFromQuery, qty]);
+  const priceId = productFromQuery?.paddlePriceId;
+  const productSlug = productFromQuery?.slug;
 
-  const cartPaddleItems = useMemo(
-    () =>
-      cartItems.map((l) => ({
-        priceId: l.paddlePriceId,
-        quantity: l.quantity,
-      })),
-    [cartItems]
-  );
+  useEffect(() => {
+    if (!autoOpen || !priceId || !productSlug || paddleOpened) return;
 
-  const handlePaySingle = () => {
-    if (!singlePaddleItems) return;
-    openPaddle(singlePaddleItems);
-  };
+    let cancelled = false;
+    const tryOpen = () => {
+      if (cancelled) return true;
+      if (!window.Paddle) return false;
+      openPaddle([{ priceId, quantity: qtyRef.current }]);
+      setPaddleOpened(true);
+      const clean = new URLSearchParams();
+      clean.set("slug", productSlug);
+      window.history.replaceState({}, "", `/checkout?${clean.toString()}`);
+      return true;
+    };
 
-  const handlePayCart = () => {
-    if (cartPaddleItems.length === 0) return;
-    openPaddle(cartPaddleItems);
-    clear();
-  };
+    if (tryOpen()) return;
+
+    const id = window.setInterval(() => {
+      if (tryOpen()) clearInterval(id);
+    }, 100);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [autoOpen, priceId, productSlug, paddleOpened]);
 
   if (slug && !productFromQuery) {
     return (
@@ -92,6 +107,26 @@ export default function CheckoutContent() {
   }
 
   if (productFromQuery?.paddlePriceId) {
+    if (autoOpen && !paddleOpened) {
+      return (
+        <div className="flex min-h-[55vh] flex-col items-center justify-center px-4">
+          <div
+            className="mb-6 h-10 w-10 animate-spin rounded-full border-2 border-accent/30 border-t-accent"
+            aria-hidden
+          />
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-text-muted">
+            Secure checkout
+          </p>
+          <p className="mt-3 text-center text-text-secondary">
+            Opening Paddle…
+          </p>
+          <p className="mt-2 text-center font-semibold text-text-primary">
+            {productFromQuery.shortTitle}
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-auto max-w-lg px-4 py-16 md:py-20">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
@@ -147,7 +182,12 @@ export default function CheckoutContent() {
 
           <button
             type="button"
-            onClick={handlePaySingle}
+            onClick={() => {
+              if (!productFromQuery.paddlePriceId) return;
+              openPaddle([
+                { priceId: productFromQuery.paddlePriceId, quantity: qty },
+              ]);
+            }}
             className="mt-8 w-full rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover"
           >
             Pay with Paddle
@@ -163,61 +203,14 @@ export default function CheckoutContent() {
     );
   }
 
-  if (cartPaddleItems.length > 0) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-16 md:py-20">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-          Checkout
-        </p>
-        <h1 className="mt-2 font-display text-2xl font-bold text-text-primary">
-          Cart checkout
-        </h1>
-        <p className="mt-2 text-sm text-text-secondary">
-          {cartItems.length} line item(s). Paddle will open in a secure overlay.
-        </p>
-
-        <ul className="mt-8 space-y-4 rounded-2xl border border-border-primary bg-bg-card p-6">
-          {cartItems.map((line) => (
-            <li
-              key={line.slug}
-              className="flex justify-between gap-4 border-b border-border-primary pb-4 last:border-0 last:pb-0"
-            >
-              <div>
-                <p className="font-medium text-text-primary">{line.title}</p>
-                <p className="text-sm text-text-muted">Qty {line.quantity}</p>
-              </div>
-              <p className="shrink-0 text-sm font-semibold text-text-primary">
-                {formatPrice(line.unitPrice * line.quantity, line.currency)}
-              </p>
-            </li>
-          ))}
-        </ul>
-
-        <button
-          type="button"
-          onClick={handlePayCart}
-          className="mt-8 w-full rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover"
-        >
-          Pay with Paddle
-        </button>
-        <Link
-          href="/cart"
-          className="mt-4 block text-center text-sm text-text-muted hover:text-text-primary"
-        >
-          ← Edit cart
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
       <h1 className="font-display text-2xl font-bold text-text-primary">
         Nothing to checkout
       </h1>
       <p className="mt-3 text-text-secondary">
-        Add something to your cart or open a product and choose{" "}
-        <span className="text-text-primary">Buy now</span>.
+        Open a product and choose <span className="text-text-primary">Buy now</span>,
+        or pick something from the catalog.
       </p>
       <Link
         href="/catalog"

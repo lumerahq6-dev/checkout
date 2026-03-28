@@ -19,6 +19,8 @@ export interface Product {
   isSubscription?: boolean;
   billingCycle?: string;
   paddlePriceId?: string;
+  /** Short URL segment: `/buy/{buyPath}` → redirects to checkout / opens Paddle */
+  buyPath: string;
 }
 
 export const products: Product[] = [
@@ -34,6 +36,7 @@ export const products: Product[] = [
     billingCycle: "/mo",
     // Paddle catalog: "Premium Access" — $14.99/mo
     paddlePriceId: "pri_01kme6f56f527jczn8gqwbbbg8",
+    buyPath: "ultimate",
     description:
       "The full Kaimatsu plugin experience — Ultimate tier unlocks every integration, automation, and library feature. Built for editors who want the complete workflow: After Effects & Premiere Pro integration, one-click asset access, and priority updates.",
     features: [
@@ -65,6 +68,7 @@ export const products: Product[] = [
     billingCycle: "/mo",
     // Paddle catalog: "Basic access" — $5.99/mo
     paddlePriceId: "pri_01kme6e8ksh2c29x6ydrwhzvzf",
+    buyPath: "basic",
     description:
       "Entry-level access to the Kaimatsu plugin ecosystem — perfect if you want core integrations and essential tools without the full Ultimate feature set. Upgrade to Ultimate anytime from your account.",
     features: [
@@ -87,6 +91,7 @@ export const products: Product[] = [
     price: 3.99,
     currency: "USD",
     paddlePriceId: "pri_01kmsx9r6rv9m84fhnf3gt3r9r",
+    buyPath: "cinematic-pack",
     description:
       "120+ handcrafted cinematic transitions designed for professional editors. Includes whip pans, light leaks, glitch cuts, zoom transitions, and film burn effects. Drag and drop directly into your timeline — works standalone or integrated with the Kaimatsu plugin.",
     features: [
@@ -110,6 +115,7 @@ export const products: Product[] = [
     price: 3.99,
     currency: "USD",
     paddlePriceId: "pri_01kmsxbsh993k211ydd40641z3",
+    buyPath: "sfx-pack",
     description:
       "200+ royalty-free sound effects curated for video editors. Whooshes, impacts, risers, UI sounds, ambient textures, and more. Organized by category and ready to drop into your timeline. Every sound is original and cleared for commercial use.",
     features: [
@@ -133,6 +139,7 @@ export const products: Product[] = [
     price: 3.99,
     currency: "USD",
     paddlePriceId: "pri_01kmsxfd5qw34va758r3zwzbw3",
+    buyPath: "lut-pack",
     description:
       "50+ cinematic color grades designed for modern content. From warm analog film looks to cold desaturated tones — every LUT is built to work across a range of footage and lighting conditions. Previews included so you can browse before applying.",
     features: [
@@ -159,6 +166,7 @@ export const products: Product[] = [
     billingCycle: "/mo",
     isFeatured: true,
     paddlePriceId: "pri_01kmsxh198avpws6bd1jvbk2gb",
+    buyPath: "coaching",
     description:
       "Get direct access to me in a private Discord channel. Weekly group sessions, personalized feedback on your edits, workflow reviews, and priority Q&A. This is for editors who want to accelerate their growth with hands-on guidance — not just tutorials.",
     features: [
@@ -180,6 +188,10 @@ export const products: Product[] = [
 
 export function getProductBySlug(slug: string): Product | undefined {
   return products.find((p) => p.slug === slug);
+}
+
+export function getProductByBuyPath(buyPath: string): Product | undefined {
+  return products.find((p) => p.buyPath === buyPath);
 }
 
 export function getFeaturedProducts(): Product[] {

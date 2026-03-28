@@ -1,10 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/data/products";
 import { formatPrice } from "@/data/products";
-import { useCart } from "@/context/CartContext";
 
 interface ProductDetailProps {
   product: Product;
@@ -29,8 +28,6 @@ function VideoIcon({ className }: { className?: string }) {
 }
 
 export default function ProductDetail({ product }: ProductDetailProps) {
-  const router = useRouter();
-  const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
@@ -67,21 +64,10 @@ export default function ProductDetail({ product }: ProductDetailProps) {
   const incrementQty = () => setQuantity((q) => Math.min(99, q + 1));
   const decrementQty = () => setQuantity((q) => Math.max(1, q - 1));
 
-  const handleBuyNow = () => {
-    if (!product.paddlePriceId) {
-      alert("This product is not available for purchase yet.");
-      return;
-    }
-    router.push(`/checkout?slug=${encodeURIComponent(product.slug)}`);
-  };
-
-  const handleAddToCart = () => {
-    if (!product.paddlePriceId) {
-      alert("This product is not available for purchase yet.");
-      return;
-    }
-    addItem(product, quantity);
-  };
+  const buyHref =
+    product.paddlePriceId != null
+      ? `/buy/${product.buyPath}${quantity > 1 ? `?qty=${quantity}` : ""}`
+      : null;
 
   return (
     <div className="bg-bg-primary">
@@ -220,24 +206,14 @@ export default function ProductDetail({ product }: ProductDetailProps) {
               </div>
             </div>
 
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              {product.paddlePriceId ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleBuyNow}
-                    className="flex-1 rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    Buy now
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    className="flex-1 rounded-xl border border-border-primary bg-bg-tertiary py-3.5 text-sm font-semibold text-text-primary transition-colors hover:border-border-accent hover:bg-bg-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    Add to cart
-                  </button>
-                </>
+            <div className="mt-10">
+              {buyHref ? (
+                <Link
+                  href={buyHref}
+                  className="block w-full rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  Buy now
+                </Link>
               ) : (
                 <button
                   type="button"
