@@ -32,6 +32,8 @@ export const products: Product[] = [
     isFeatured: true,
     isSubscription: true,
     billingCycle: "/mo",
+    // Paddle catalog: "Premium Access" — same $14.99/mo subscription
+    paddlePriceId: "pri_01kme6f56f527jczn8gqwbbbg8",
     description:
       "The flagship Kaimatsu plugin — built from the ground up to streamline your editing workflow. Integrates directly with After Effects and Premiere Pro, giving you one-click access to every asset pack in the Kaimatsu library plus exclusive automation tools that save you hours per project.",
     features: [
@@ -188,8 +190,12 @@ export const products: Product[] = [
     slug: "overlay-texture-pack",
     title: "Overlay & Texture Pack",
     shortTitle: "Overlay & Texture Pack",
-    price: 17.99,
+    price: 5.99,
     currency: "USD",
+    isSubscription: true,
+    billingCycle: "/mo",
+    // Paddle catalog: "Basic access" — $5.99/mo
+    paddlePriceId: "pri_01kme6e8ksh2c29x6ydrwhzvzf",
     description:
       "80+ high-resolution overlays and textures to add depth, grain, and atmosphere to your edits. Includes film grain, dust particles, light leaks, bokeh, lens flares, and paper textures. Layer them on top of your footage for an instant cinematic look.",
     features: [
@@ -203,7 +209,7 @@ export const products: Product[] = [
       "Kaimatsu plugin integration",
     ],
     disclaimer:
-      "One-time purchase. Personal and commercial use permitted. Redistribution or resale is prohibited.",
+      "Subscription required for Basic access tier. Personal and commercial use permitted. Cancellation stops access at the end of the billing period.",
     imageCount: 1,
   },
 ];

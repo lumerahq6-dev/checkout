@@ -6,6 +6,7 @@ import AnnouncementBar from "@/components/AnnouncementBar";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PaddleInit from "@/components/PaddleInit";
+import Providers from "@/components/Providers";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -32,10 +33,12 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
         <PaddleInit />
-        <AnnouncementBar />
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <Providers>
+          <AnnouncementBar />
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </Providers>
       </body>
     </html>
   );

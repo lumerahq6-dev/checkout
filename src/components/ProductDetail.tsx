@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/data/products";
 import { formatPrice } from "@/data/products";
+import { useCart } from "@/context/CartContext";
 
 interface ProductDetailProps {
   product: Product;
@@ -27,6 +29,8 @@ function VideoIcon({ className }: { className?: string }) {
 }
 
 export default function ProductDetail({ product }: ProductDetailProps) {
+  const router = useRouter();
+  const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
   const [shareUrl, setShareUrl] = useState("");
@@ -63,23 +67,20 @@ export default function ProductDetail({ product }: ProductDetailProps) {
   const incrementQty = () => setQuantity((q) => Math.min(99, q + 1));
   const decrementQty = () => setQuantity((q) => Math.max(1, q - 1));
 
-  const handleBuy = () => {
+  const handleBuyNow = () => {
     if (!product.paddlePriceId) {
       alert("This product is not available for purchase yet.");
       return;
     }
-    if (!window.Paddle) {
-      alert("Checkout is loading, please try again in a moment.");
+    router.push(`/checkout?slug=${encodeURIComponent(product.slug)}`);
+  };
+
+  const handleAddToCart = () => {
+    if (!product.paddlePriceId) {
+      alert("This product is not available for purchase yet.");
       return;
     }
-    window.Paddle.Checkout.open({
-      items: [{ priceId: product.paddlePriceId, quantity }],
-      customData: { productSlug: product.slug },
-      settings: {
-        displayMode: "overlay",
-        theme: "dark",
-      },
-    });
+    addItem(product, quantity);
   };
 
   return (
@@ -219,14 +220,33 @@ export default function ProductDetail({ product }: ProductDetailProps) {
               </div>
             </div>
 
-            <div className="mt-10">
-              <button
-                type="button"
-                onClick={handleBuy}
-                className="w-full rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {product.isSubscription ? "Subscribe now" : "Buy now"}
-              </button>
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+              {product.paddlePriceId ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleBuyNow}
+                    className="flex-1 rounded-xl bg-accent py-3.5 text-sm font-semibold text-white shadow-[0_0_40px_rgba(139,92,246,0.25)] transition-colors hover:bg-accent-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    Buy now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className="flex-1 rounded-xl border border-border-primary bg-bg-tertiary py-3.5 text-sm font-semibold text-text-primary transition-colors hover:border-border-accent hover:bg-bg-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    Add to cart
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="w-full cursor-not-allowed rounded-xl border border-border-primary bg-bg-tertiary py-3.5 text-sm font-semibold text-text-muted"
+                >
+                  Coming soon
+                </button>
+              )}
             </div>
           </div>
         </div>
