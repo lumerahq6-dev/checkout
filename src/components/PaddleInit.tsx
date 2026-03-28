@@ -14,6 +14,16 @@ declare global {
 
 export default function PaddleInit() {
   useEffect(() => {
+    const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN?.trim();
+    if (!token) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          "[Paddle] Missing NEXT_PUBLIC_PADDLE_CLIENT_TOKEN — add it in .env.local (see .env.example). Checkout will not work until set."
+        );
+      }
+      return;
+    }
+
     const interval = setInterval(() => {
       if (typeof window !== "undefined" && window.Paddle) {
         clearInterval(interval);
@@ -22,8 +32,17 @@ export default function PaddleInit() {
           window.Paddle.Environment.set("sandbox");
         }
         window.Paddle.Initialize({
-          token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "",
-          eventCallback: function (event: { name: string; data?: { transaction_id?: string } }) {
+          token,
+          checkout: {
+            settings: {
+              displayMode: "overlay",
+              theme: "dark",
+            },
+          },
+          eventCallback: function (event: {
+            name: string;
+            data?: { transaction_id?: string };
+          }) {
             if (event.name === "checkout.completed" && event.data?.transaction_id) {
               window.location.href = `/checkout/success?txn=${event.data.transaction_id}`;
             }
